@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\AddTaskAssigneesRequest;
+use App\Http\Requests\IndexTasksRequest;
 use App\Http\Requests\ManageTaskAssigneesRequest;
 use App\Http\Requests\StoreTaskRequest;
 use App\Http\Requests\UpdateTaskRequest;
@@ -14,17 +15,17 @@ use App\Models\Task;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 
 class TaskController extends Controller
 {
-    public function index(Request $request): JsonResponse
+    public function index(IndexTasksRequest $request): JsonResponse
     {
         Gate::authorize('viewAny', Task::class);
 
         $user = $request->user();
+        $filters = $request->validated();
         $query = Task::query()->with(['creator:id,name', 'assignees:id,name']);
 
         if ($user->role !== UserRole::Admin) {
@@ -34,7 +35,20 @@ class TaskController extends Controller
             });
         }
 
-        $tasks = $query->orderByDesc('created_at')->orderByDesc('id')->paginate(15);
+        $query
+            ->when(
+                isset($filters['status']),
+                fn (Builder $query) => $query->where('is_completed', $filters['status'] === 'completed'),
+            )
+            ->when(
+                filled($filters['search'] ?? null),
+                fn (Builder $query) => $query->where('title', 'like', '%'.$filters['search'].'%'),
+            );
+
+        $perPage = (int) ($filters['per_page'] ?? 10);
+        $tasks = $query->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate($perPage);
 
         return response()->json([
             'message' => 'Tasks retrieved successfully.',

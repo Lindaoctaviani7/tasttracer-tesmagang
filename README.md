@@ -92,7 +92,7 @@ Successful responses use `{ "message": "...", "data": { ... } }`. Validation and
 
 All task endpoints require a Sanctum bearer token. Admins can access every task; members can access only tasks they created or are assigned to. Task responses never accept `created_by` from the client; new tasks are owned by the authenticated user.
 
-- `GET /api/tasks` lists all tasks for admins and the member's created/assigned tasks, paginated 15 per page.
+- `GET /api/tasks` lists all tasks for admins and the member's created/assigned tasks. It accepts `status=completed|pending`, `search=keyword` (title search), `page` (minimum 1), and `per_page` (1–100, default 10); filtering is applied before pagination.
 - `POST /api/tasks` creates a task for the authenticated user. It accepts `title` (required, maximum 100 characters), optional `description`, and optional boolean `is_completed` (defaults to `false`).
 - `GET /api/tasks/{task}`, `PUT /api/tasks/{task}`, and `DELETE /api/tasks/{task}` show, replace, and delete tasks subject to the same access policy. `PUT` requires a non-empty `title` up to 100 characters and accepts optional `description` and `is_completed`; `PATCH` remains available for partial updates.
 - `PUT /api/tasks/{task}/assignees` replaces the assignee list using `{ "user_ids": [1, 2] }`. Use an empty array to remove all assignees. Admins can manage assignees on any task; members need access to the task.

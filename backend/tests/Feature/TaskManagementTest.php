@@ -56,7 +56,7 @@ class TaskManagementTest extends TestCase
 
         $firstPage->assertOk()
             ->assertJsonPath('data.pagination.current_page', 1)
-            ->assertJsonPath('data.pagination.per_page', 15)
+            ->assertJsonPath('data.pagination.per_page', 10)
             ->assertJsonPath('data.pagination.total', 16)
             ->assertJsonPath('data.tasks.0.id', $tasks->first()->id);
 
@@ -64,7 +64,7 @@ class TaskManagementTest extends TestCase
             ->assertOk()
             ->assertJsonPath('data.pagination.current_page', 2)
             ->assertJsonPath('data.pagination.total', 16)
-            ->assertJsonPath('data.tasks.0.id', $tasks->last()->id);
+            ->assertJsonPath('data.tasks.0.id', $tasks[10]->id);
     }
 
     public function test_admin_can_view_any_task_directly(): void
