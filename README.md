@@ -75,7 +75,18 @@ Docker Compose starts PostgreSQL, the Laravel API, and the Vite development serv
 - `GET /api/health` returns `{"status":"ok"}`.
 - CORS allows the origin configured by `FRONTEND_URL` in `backend/.env`.
 - `VITE_API_BASE_URL` in `frontend/.env` is the frontend API base URL.
-- Sanctum is not installed yet; authentication is intentionally outside this initialization scope.
+
+## Authentication
+
+The API uses Laravel Sanctum personal access tokens. Registration and login return a bearer token and its expiration timestamp; send the token on protected requests as `Authorization: Bearer <token>`. Tokens expire after 60 minutes by default; change `SANCTUM_EXPIRATION` in `backend/.env` to adjust the lifetime.
+
+- `POST /api/register` accepts `name`, `email`, `password`, and `password_confirmation`. Passwords must be at least eight characters with uppercase, lowercase, numeric, and symbol characters. Public registration always creates a `member`; a supplied `role` is rejected.
+- `POST /api/login` accepts `email` and `password`. Attempts are limited to five per minute per email/IP pair.
+- `GET /api/user` returns the authenticated user's public profile.
+- `POST /api/logout` revokes the current bearer token only.
+- Run `php artisan migrate` from `backend` to create the Sanctum token table.
+
+Successful responses use `{ "message": "...", "data": { ... } }`. Validation and invalid-credential errors return HTTP 422; protected endpoints require a valid bearer token and otherwise return HTTP 401.
 
 ## Tests
 
