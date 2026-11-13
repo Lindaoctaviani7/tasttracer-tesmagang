@@ -77,4 +77,29 @@ describe('API client', () => {
       status: null,
     })
   })
+
+  it('does not expose internal server error details to the user', async () => {
+    const adapter: AxiosAdapter = async (config) => {
+      throw new AxiosError(
+        'Request failed',
+        AxiosError.ERR_BAD_RESPONSE,
+        config,
+        undefined,
+        {
+          data: { message: 'SQLSTATE[08006] database credentials rejected' },
+          status: 500,
+          statusText: 'Internal Server Error',
+          headers: new AxiosHeaders(),
+          config,
+        },
+      )
+    }
+    apiClient.defaults.adapter = adapter
+
+    await expect(apiClient.post('/register', {})).rejects.toMatchObject({
+      name: 'ApiError',
+      message: 'Server API mengalami gangguan. Silakan coba lagi nanti.',
+      status: 500,
+    })
+  })
 })

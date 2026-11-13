@@ -68,9 +68,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = useCallback(async (data: RegistrationData): Promise<void> => {
     setError(null)
-    const session = await authService.register(data)
-    saveAccessToken(session.token)
-    setUser(session.user)
+    await authService.register(data)
+    clearAccessToken()
+    setUser(null)
   }, [])
 
   const logout = useCallback(async (): Promise<void> => {

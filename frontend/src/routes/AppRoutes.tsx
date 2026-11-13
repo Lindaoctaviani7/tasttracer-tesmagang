@@ -22,7 +22,7 @@ function GuestRoute() {
     return <LoadingState message="Memeriksa sesi..." />
   }
 
-  return user ? <Navigate to="/account" replace /> : <Outlet />
+  return user ? <Navigate to="/dashboard" replace /> : <Outlet />
 }
 
 function HomeRedirect() {
@@ -32,7 +32,7 @@ function HomeRedirect() {
     return <LoadingState message="Memeriksa sesi..." />
   }
 
-  return <Navigate to={user ? '/account' : '/login'} replace />
+  return <Navigate to={user ? '/dashboard' : '/login'} replace />
 }
 
 export function AppRoutes() {
@@ -45,7 +45,8 @@ export function AppRoutes() {
           <Route path="/register" element={<RegisterPage />} />
         </Route>
         <Route element={<ProtectedRoute />}>
-          <Route path="/account" element={<AccountPage />} />
+          <Route path="/dashboard" element={<AccountPage />} />
+          <Route path="/account" element={<Navigate to="/dashboard" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

@@ -18,10 +18,8 @@ export const authService = {
     return response.data.data
   },
 
-  async register(data: RegistrationData): Promise<AuthSession> {
-    const response = await apiClient.post<ApiResponse<AuthSession>>('/register', data)
-
-    return response.data.data
+  async register(data: RegistrationData): Promise<void> {
+    await apiClient.post<ApiResponse<AuthSession>>('/register', data)
   },
 
   async logout(): Promise<void> {

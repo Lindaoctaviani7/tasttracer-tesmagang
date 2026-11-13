@@ -25,8 +25,11 @@ export class ApiError extends Error {
 export function toApiError(error: unknown): ApiError {
   if (axios.isAxiosError<ApiErrorResponse>(error)) {
     const response = error.response
-    const message = response?.data?.message
-      ?? (response ? 'Permintaan tidak dapat diproses.' : 'Tidak dapat terhubung ke server API.')
+    const message = response === undefined
+      ? 'Tidak dapat terhubung ke server API.'
+      : response.status >= 500
+        ? 'Server API mengalami gangguan. Silakan coba lagi nanti.'
+        : response.data?.message ?? 'Permintaan tidak dapat diproses.'
 
     return new ApiError(message, response?.status ?? null, response?.data?.errors ?? {})
   }
@@ -40,4 +43,12 @@ export function toApiError(error: unknown): ApiError {
 
 export function getErrorMessage(error: unknown): string {
   return error instanceof ApiError ? error.message : toApiError(error).message
+}
+
+export function getValidationMessage(error: unknown, field: string): string | undefined {
+  if (!(error instanceof ApiError)) {
+    return undefined
+  }
+
+  return error.errors[field]?.[0]
 }

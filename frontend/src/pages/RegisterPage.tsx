@@ -1,9 +1,13 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { getErrorMessage } from '../api/errors'
-import { ErrorState } from '../components/feedback/ErrorState'
+import { getErrorMessage, getValidationMessage } from '../api/errors'
+import { AuthField } from '../components/auth/AuthField'
+import { AuthNotice } from '../components/auth/AuthNotice'
+import { AuthSubmitButton } from '../components/auth/AuthSubmitButton'
 import { useAuth } from '../hooks/useAuth'
 import { AuthLayout } from '../layouts/AuthLayout'
+
+const PASSWORD_REQUIREMENTS = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/
 
 export function RegisterPage() {
   const { register, error: authError, clearError } = useAuth()
@@ -13,21 +17,45 @@ export function RegisterPage() {
   const [password, setPassword] = useState('')
   const [passwordConfirmation, setPasswordConfirmation] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError(null)
+    setFieldErrors({})
     clearError()
 
-    if (password !== passwordConfirmation) {
-      setError('Konfirmasi password tidak sama.')
+    const validationErrors: Record<string, string> = {}
 
-      return
+    if (name.trim().length === 0) {
+      validationErrors.name = 'Nama wajib diisi.'
+    } else if (name.length > 255) {
+      validationErrors.name = 'Nama maksimal 255 karakter.'
     }
 
-    if (!/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[^A-Za-z0-9]).{8,}$/.test(password)) {
-      setError('Password minimal 8 karakter dan harus memuat huruf besar, huruf kecil, angka, dan simbol.')
+    if (email.trim().length === 0) {
+      validationErrors.email = 'Alamat email wajib diisi.'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 255) {
+      validationErrors.email = 'Masukkan alamat email yang valid (maksimal 255 karakter).'
+    }
+
+    if (password !== passwordConfirmation) {
+      validationErrors.password_confirmation = 'Konfirmasi password tidak sama.'
+    }
+
+    if (password.length > 255) {
+      validationErrors.password = 'Password maksimal 255 karakter.'
+    } else if (!PASSWORD_REQUIREMENTS.test(password)) {
+      validationErrors.password = 'Gunakan minimal 8 karakter dengan huruf besar, huruf kecil, angka, dan simbol.'
+    }
+
+    if (passwordConfirmation.length > 255) {
+      validationErrors.password_confirmation = 'Konfirmasi password maksimal 255 karakter.'
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setFieldErrors(validationErrors)
 
       return
     }
@@ -36,83 +64,107 @@ export function RegisterPage() {
 
     try {
       await register({
-        name,
-        email,
+        name: name.trim(),
+        email: email.trim(),
         password,
         password_confirmation: passwordConfirmation,
       })
-      navigate('/account', { replace: true })
+      setPassword('')
+      setPasswordConfirmation('')
+      navigate('/login', {
+        replace: true,
+        state: { notice: 'Registrasi berhasil. Silakan masuk dengan akun baru Anda.' },
+      })
     } catch (requestError: unknown) {
-      setError(getErrorMessage(requestError))
+      const backendErrors = ['name', 'email', 'password', 'password_confirmation']
+        .reduce<Record<string, string>>((validationErrors, field) => {
+          const message = getValidationMessage(requestError, field)
+
+          if (message) {
+            validationErrors[field] = message
+          }
+
+          return validationErrors
+        }, {})
+      setFieldErrors(backendErrors)
+
+      if (Object.keys(backendErrors).length === 0) {
+        setError(getErrorMessage(requestError))
+      }
     } finally {
       setIsSubmitting(false)
     }
   }
 
   return (
-    <AuthLayout title="Buat akun" description="Daftar untuk mulai menggunakan Task Management.">
-      <form className="flex flex-col gap-5" onSubmit={handleSubmit}>
-        {(error ?? authError) && <ErrorState message={error ?? authError ?? ''} />}
-        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-          Nama
-          <input
-            autoComplete="name"
-            className="rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            onChange={(event) => setName(event.target.value)}
-            required
-            type="text"
-            value={name}
-          />
-        </label>
-        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-          Email
-          <input
-            autoComplete="email"
-            className="rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            onChange={(event) => setEmail(event.target.value)}
-            required
-            type="email"
-            value={email}
-          />
-        </label>
-        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-          Password
-          <input
-            autoComplete="new-password"
-            className="rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            minLength={8}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-            type="password"
-            value={password}
-          />
-        </label>
-        <label className="flex flex-col gap-2 text-sm font-medium text-slate-700">
-          Konfirmasi password
-          <input
-            autoComplete="new-password"
-            className="rounded-lg border border-slate-300 px-3 py-2.5 outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-            minLength={8}
-            onChange={(event) => setPasswordConfirmation(event.target.value)}
-            required
-            type="password"
-            value={passwordConfirmation}
-          />
-        </label>
-        <button
-          className="rounded-lg bg-indigo-600 px-4 py-2.5 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
-          disabled={isSubmitting}
-          type="submit"
-        >
-          {isSubmitting ? 'Memproses...' : 'Daftar'}
-        </button>
+    <AuthLayout
+      eyebrow="Mulai berkolaborasi"
+      title="Buat akun baru"
+      description="Daftar untuk mengatur pekerjaan dan berkolaborasi dengan tim Anda."
+    >
+      <form className="flex flex-col gap-4" noValidate onSubmit={handleSubmit}>
+        {(error ?? authError) && <AuthNotice message={error ?? authError ?? ''} />}
+        <AuthField
+          autoComplete="name"
+          error={fieldErrors.name}
+          id="register-name"
+          label="Nama lengkap"
+          maxLength={255}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Nama Anda"
+          required
+          type="text"
+          value={name}
+        />
+        <AuthField
+          autoComplete="email"
+          error={fieldErrors.email}
+          id="register-email"
+          label="Alamat email"
+          maxLength={255}
+          onChange={(event) => setEmail(event.target.value)}
+          placeholder="nama@perusahaan.com"
+          required
+          type="email"
+          value={email}
+        />
+        <AuthField
+          autoComplete="new-password"
+          error={fieldErrors.password}
+          id="register-password"
+          label="Password"
+          maxLength={255}
+          onChange={(event) => setPassword(event.target.value)}
+          placeholder="Buat password yang kuat"
+          required
+          type="password"
+          value={password}
+        />
+        <p className="-mt-2 text-xs leading-5 text-slate-500">
+          Minimal 8 karakter, termasuk huruf besar, huruf kecil, angka, dan simbol.
+        </p>
+        <AuthField
+          autoComplete="new-password"
+          error={fieldErrors.password_confirmation}
+          id="register-password-confirmation"
+          label="Konfirmasi password"
+          maxLength={255}
+          onChange={(event) => setPasswordConfirmation(event.target.value)}
+          placeholder="Ketik ulang password"
+          required
+          type="password"
+          value={passwordConfirmation}
+        />
+        <AuthSubmitButton isLoading={isSubmitting} loadingLabel="Membuat akun...">
+          Daftar
+        </AuthSubmitButton>
       </form>
-      <p className="mt-6 text-center text-sm text-slate-600">
+      <div className="mt-6 border-t border-slate-100 pt-5 text-center text-sm text-slate-600">
         Sudah memiliki akun?{' '}
-        <Link className="font-semibold text-indigo-700 hover:underline" to="/login">
+        <Link className="font-semibold text-indigo-700 underline-offset-4 hover:underline" to="/login">
           Masuk
         </Link>
-      </p>
+      </div>
     </AuthLayout>
   )
 }
