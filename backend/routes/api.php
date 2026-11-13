@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\AdminUserController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\TagController;
 use App\Http\Controllers\Api\TaskController;
@@ -25,6 +26,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/tags', [TagController::class, 'index']);
 
     Route::middleware('role:admin')->group(function (): void {
+        Route::get('/admin/users', [AdminUserController::class, 'index']);
+        Route::get('/admin/users/{user}', [AdminUserController::class, 'show']);
+        Route::patch('/admin/users/{user}/role', [AdminUserController::class, 'updateRole']);
         Route::apiResource('users', UserController::class)->except(['store']);
         Route::post('/tags', [TagController::class, 'store']);
         Route::put('/tags/{tag}', [TagController::class, 'update']);

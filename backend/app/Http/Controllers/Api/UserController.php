@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\UpdateUserRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\AdminUserService;
 use Illuminate\Http\JsonResponse;
 
 class UserController extends Controller
@@ -36,9 +38,30 @@ class UserController extends Controller
         ]);
     }
 
-    public function update(UpdateUserRequest $request, User $user): JsonResponse
-    {
-        $user->update($request->validated());
+    public function update(
+        UpdateUserRequest $request,
+        User $user,
+        AdminUserService $adminUserService,
+    ): JsonResponse {
+        $data = $request->validated();
+
+        if (array_key_exists('role', $data)) {
+            $updatedUser = $adminUserService->updateRole($user, UserRole::from($data['role']));
+
+            if ($updatedUser === null) {
+                return response()->json([
+                    'message' => 'The last administrator cannot be demoted.',
+                    'data' => null,
+                ], 409);
+            }
+
+            $user = $updatedUser;
+            unset($data['role']);
+        }
+
+        if ($data !== []) {
+            $user->update($data);
+        }
 
         return response()->json([
             'message' => 'User updated successfully.',
@@ -46,9 +69,14 @@ class UserController extends Controller
         ]);
     }
 
-    public function destroy(User $user): JsonResponse
+    public function destroy(User $user, AdminUserService $adminUserService): JsonResponse
     {
-        $user->delete();
+        if (! $adminUserService->delete($user)) {
+            return response()->json([
+                'message' => 'The last administrator cannot be deleted.',
+                'data' => null,
+            ], 409);
+        }
 
         return response()->json([
             'message' => 'User deleted successfully.',
