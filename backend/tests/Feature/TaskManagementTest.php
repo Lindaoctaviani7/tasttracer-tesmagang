@@ -44,6 +44,29 @@ class TaskManagementTest extends TestCase
             ->assertJsonPath('data.pagination.total', 3);
     }
 
+    public function test_task_list_is_paginated_and_sorted_by_newest(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $tasks = collect(range(0, 15))
+            ->map(fn (int $minutesAgo): Task => Task::factory()->create([
+                'created_at' => now()->subMinutes($minutesAgo),
+            ]));
+
+        $firstPage = $this->authenticateAs($admin)->getJson('/api/tasks');
+
+        $firstPage->assertOk()
+            ->assertJsonPath('data.pagination.current_page', 1)
+            ->assertJsonPath('data.pagination.per_page', 15)
+            ->assertJsonPath('data.pagination.total', 16)
+            ->assertJsonPath('data.tasks.0.id', $tasks->first()->id);
+
+        $this->authenticateAs($admin)->getJson('/api/tasks?page=2')
+            ->assertOk()
+            ->assertJsonPath('data.pagination.current_page', 2)
+            ->assertJsonPath('data.pagination.total', 16)
+            ->assertJsonPath('data.tasks.0.id', $tasks->last()->id);
+    }
+
     public function test_admin_can_view_any_task_directly(): void
     {
         $admin = User::factory()->admin()->create();
@@ -69,16 +92,40 @@ class TaskManagementTest extends TestCase
         $this->assertDatabaseHas('tasks', [
             'title' => 'Prepare sprint plan',
             'created_by' => $member->id,
+            'is_completed' => false,
         ]);
+    }
+
+    public function test_task_creation_rejects_an_empty_title(): void
+    {
+        $member = User::factory()->create();
+
+        $this->authenticateAs($member)->postJson('/api/tasks', ['title' => ''])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('title')
+            ->assertJsonPath('errors.title.0', 'The title field is required.');
+
+        $this->assertDatabaseMissing('tasks', ['created_by' => $member->id]);
     }
 
     public function test_admin_can_create_a_task(): void
     {
         $admin = User::factory()->admin()->create();
 
-        $this->authenticateAs($admin)->postJson('/api/tasks', ['title' => 'Admin task'])
+        $this->authenticateAs($admin)->postJson('/api/tasks', [
+            'title' => str_repeat('T', 100),
+            'is_completed' => true,
+        ])
             ->assertCreated()
+            ->assertJsonPath('data.task.title', str_repeat('T', 100))
+            ->assertJsonPath('data.task.is_completed', true)
             ->assertJsonPath('data.task.created_by', $admin->id);
+
+        $this->assertDatabaseHas('tasks', [
+            'title' => str_repeat('T', 100),
+            'created_by' => $admin->id,
+            'is_completed' => true,
+        ]);
     }
 
     public function test_member_cannot_create_a_task_for_another_user(): void
@@ -108,6 +155,23 @@ class TaskManagementTest extends TestCase
             ->assertJsonPath('errors.title.0', 'The title field must not be greater than 100 characters.');
     }
 
+    public function test_task_creation_rejects_invalid_optional_fields(): void
+    {
+        $member = User::factory()->create();
+
+        $this->authenticateAs($member)->postJson('/api/tasks', [
+            'title' => 'Valid title',
+            'description' => 42,
+            'is_completed' => 'finished',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors(['description', 'is_completed'])
+            ->assertJsonPath('errors.description.0', 'The description field must be a string.')
+            ->assertJsonPath('errors.is_completed.0', 'The is completed field must be true or false.');
+
+        $this->assertDatabaseMissing('tasks', ['title' => 'Valid title']);
+    }
+
     public function test_member_can_update_a_task_they_created_or_are_assigned_to(): void
     {
         $member = User::factory()->create();
@@ -135,6 +199,71 @@ class TaskManagementTest extends TestCase
         ]);
     }
 
+    public function test_member_can_replace_task_fields_with_put(): void
+    {
+        $member = User::factory()->create();
+        $task = Task::factory()->for($member, 'creator')->create([
+            'title' => 'Old title',
+            'description' => 'Old description',
+            'is_completed' => false,
+        ]);
+
+        $this->authenticateAs($member)->putJson("/api/tasks/{$task->id}", [
+            'title' => 'Replacement title',
+            'description' => 'Replacement description',
+            'is_completed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.task.title', 'Replacement title')
+            ->assertJsonPath('data.task.description', 'Replacement description')
+            ->assertJsonPath('data.task.is_completed', true);
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $task->id,
+            'title' => 'Replacement title',
+            'description' => 'Replacement description',
+            'is_completed' => true,
+            'created_by' => $member->id,
+        ]);
+    }
+
+    public function test_put_rejects_an_empty_task_title(): void
+    {
+        $member = User::factory()->create();
+        $task = Task::factory()->for($member, 'creator')->create([
+            'title' => 'Keep this title',
+        ]);
+
+        $this->authenticateAs($member)->putJson("/api/tasks/{$task->id}", [
+            'title' => '',
+            'description' => null,
+            'is_completed' => false,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('title')
+            ->assertJsonPath('errors.title.0', 'The title field is required.');
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $task->id,
+            'title' => 'Keep this title',
+        ]);
+    }
+
+    public function test_task_endpoints_return_404_for_a_missing_task(): void
+    {
+        $admin = User::factory()->admin()->create();
+
+        $this->authenticateAs($admin)->getJson('/api/tasks/999999')
+            ->assertNotFound();
+
+        $this->authenticateAs($admin)->putJson('/api/tasks/999999', [
+            'title' => 'Missing task',
+        ])->assertNotFound();
+
+        $this->authenticateAs($admin)->deleteJson('/api/tasks/999999')
+            ->assertNotFound();
+    }
+
     public function test_member_cannot_update_or_delete_an_unrelated_task(): void
     {
         $member = User::factory()->create();
@@ -143,7 +272,7 @@ class TaskManagementTest extends TestCase
         $this->authenticateAs($member)->getJson("/api/tasks/{$task->id}")
             ->assertForbidden();
 
-        $this->authenticateAs($member)->patchJson("/api/tasks/{$task->id}", [
+        $this->authenticateAs($member)->putJson("/api/tasks/{$task->id}", [
             'title' => 'Unauthorized update',
         ])->assertForbidden();
 
@@ -200,8 +329,9 @@ class TaskManagementTest extends TestCase
         $otherUser = User::factory()->create();
         $task = Task::factory()->for($member, 'creator')->create();
 
-        $this->authenticateAs($member)->patchJson("/api/tasks/{$task->id}", [
+        $this->authenticateAs($member)->putJson("/api/tasks/{$task->id}", [
             'created_by' => $otherUser->id,
+            'title' => 'Attempted ownership update',
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('created_by');

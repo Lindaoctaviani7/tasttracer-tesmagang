@@ -16,6 +16,7 @@ class StoreTaskRequest extends FormRequest
         return [
             'title' => ['required', 'string', 'max:100'],
             'description' => ['nullable', 'string'],
+            'is_completed' => ['sometimes', 'boolean'],
             'created_by' => ['prohibited'],
         ];
     }
