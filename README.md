@@ -88,6 +88,23 @@ The API uses Laravel Sanctum personal access tokens. Registration and login retu
 
 Successful responses use `{ "message": "...", "data": { ... } }`. Validation and invalid-credential errors return HTTP 422; protected endpoints require a valid bearer token and otherwise return HTTP 401.
 
+## Task and user access
+
+All task endpoints require a Sanctum bearer token. Admins can access every task; members can access only tasks they created or are assigned to. Task responses never accept `created_by` from the client; new tasks are owned by the authenticated user.
+
+- `GET /api/tasks` lists all tasks for admins and the member's created/assigned tasks, paginated 15 per page.
+- `POST /api/tasks` creates a task for the authenticated user. It accepts `title` (required, maximum 100 characters) and optional `description`.
+- `GET /api/tasks/{task}`, `PATCH /api/tasks/{task}`, and `DELETE /api/tasks/{task}` show, update, and delete tasks subject to the same access policy. Updates accept `title`, `description`, and `is_completed`.
+- `PUT /api/tasks/{task}/assignees` replaces the assignee list using `{ "user_ids": [1, 2] }`. Use an empty array to remove all assignees. Admins can manage assignees on any task; members need access to the task.
+
+User management requires the `admin` role:
+
+- `GET /api/users` and `GET /api/users/{user}` list and show users.
+- `PATCH /api/users/{user}` updates `name`, `email`, and/or `role` (`admin` or `member`).
+- `DELETE /api/users/{user}` deletes a user. Per the database foreign keys, this also deletes tasks created by that user.
+
+The role middleware protects user-management routes, while `TaskPolicy` authorizes task actions. Authenticated requests without access receive HTTP 403; invalid input receives HTTP 422; unknown records receive HTTP 404.
+
 ## Tests
 
 Run backend tests from `backend`:
