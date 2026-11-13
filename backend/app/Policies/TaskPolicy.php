@@ -38,6 +38,11 @@ class TaskPolicy
         return $this->canAccess($user, $task);
     }
 
+    public function manageTags(User $user, Task $task): bool
+    {
+        return $this->canAccess($user, $task);
+    }
+
     private function canAccess(User $user, Task $task): bool
     {
         return $user->role === UserRole::Admin

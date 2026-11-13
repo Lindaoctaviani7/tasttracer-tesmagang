@@ -97,6 +97,8 @@ All task endpoints require a Sanctum bearer token. Admins can access every task;
 - `GET /api/tasks/{task}`, `PUT /api/tasks/{task}`, and `DELETE /api/tasks/{task}` show, replace, and delete tasks subject to the same access policy. `PUT` requires a non-empty `title` up to 100 characters and accepts optional `description` and `is_completed`; `PATCH` remains available for partial updates.
 - `PUT /api/tasks/{task}/assignees` replaces the assignee list using `{ "user_ids": [1, 2] }`. Use an empty array to remove all assignees. Admins can manage assignees on any task; members need access to the task.
 - `GET /api/tasks/{task}/assignees` returns assignee profiles; `POST /api/tasks/{task}/assignees` adds one or more users using `{ "user_ids": [1, 2] }` without removing existing assignees; `DELETE /api/tasks/{task}/assignees/{userId}` removes one assignee. Re-adding an existing assignee does not create a duplicate. These endpoints use the same task access policy.
+- Authenticated users can list tags with `GET /api/tags`. Master-data changes are admin-only: `POST /api/tags` with `{ "name": "planning" }`, `PUT /api/tags/{tag}` with a unique `name`, and `DELETE /api/tags/{tag}`. Deleting a tag also removes its task associations, not the tasks.
+- Admins can attach tags to any task; members can attach or remove tags only on tasks they created or are assigned to. `POST /api/tasks/{task}/tags` accepts `{ "tag_ids": [1, 2] }` and adds tags without replacing existing associations; `DELETE /api/tasks/{task}/tags/{tagId}` removes one association. Duplicate IDs in a request are rejected, and re-adding an existing association is idempotent.
 
 User management requires the `admin` role:
 

@@ -7,8 +7,10 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AddTaskAssigneesRequest;
 use App\Http\Requests\IndexTasksRequest;
 use App\Http\Requests\ManageTaskAssigneesRequest;
+use App\Http\Requests\ManageTaskTagsRequest;
 use App\Http\Requests\StoreTaskRequest;
 use App\Http\Requests\UpdateTaskRequest;
+use App\Http\Resources\TagResource;
 use App\Http\Resources\TaskResource;
 use App\Http\Resources\UserResource;
 use App\Models\Task;
@@ -26,7 +28,7 @@ class TaskController extends Controller
 
         $user = $request->user();
         $filters = $request->validated();
-        $query = Task::query()->with(['creator:id,name', 'assignees:id,name']);
+        $query = Task::query()->with(['creator:id,name', 'assignees:id,name', 'tags']);
 
         if ($user->role !== UserRole::Admin) {
             $query->where(function (Builder $query) use ($user): void {
@@ -72,7 +74,7 @@ class TaskController extends Controller
             ...$request->validated(),
             'created_by' => $request->user()->id,
         ]);
-        $task->load(['creator:id,name', 'assignees:id,name']);
+        $task->load(['creator:id,name', 'assignees:id,name', 'tags']);
 
         return response()->json([
             'message' => 'Task created successfully.',
@@ -83,7 +85,7 @@ class TaskController extends Controller
     public function show(Task $task): JsonResponse
     {
         Gate::authorize('view', $task);
-        $task->load(['creator:id,name', 'assignees:id,name']);
+        $task->load(['creator:id,name', 'assignees:id,name', 'tags']);
 
         return response()->json([
             'message' => 'Task retrieved successfully.',
@@ -95,7 +97,7 @@ class TaskController extends Controller
     {
         Gate::authorize('update', $task);
         $task->update($request->validated());
-        $task->load(['creator:id,name', 'assignees:id,name']);
+        $task->load(['creator:id,name', 'assignees:id,name', 'tags']);
 
         return response()->json([
             'message' => 'Task updated successfully.',
@@ -171,6 +173,36 @@ class TaskController extends Controller
             'message' => 'Task assignee removed successfully.',
             'data' => [
                 'assignee' => (new UserResource($assignee))->resolve(),
+            ],
+        ]);
+    }
+
+    public function storeTags(ManageTaskTagsRequest $request, Task $task): JsonResponse
+    {
+        Gate::authorize('manageTags', $task);
+
+        $task->tags()->syncWithoutDetachingOrFail($request->validated('tag_ids'));
+        $task->load('tags');
+
+        return response()->json([
+            'message' => 'Tags added to task successfully.',
+            'data' => [
+                'tags' => TagResource::collection($task->tags)->resolve(),
+            ],
+        ]);
+    }
+
+    public function destroyTag(Task $task, int $tagId): JsonResponse
+    {
+        Gate::authorize('manageTags', $task);
+
+        $tag = $task->tags()->whereKey($tagId)->firstOrFail();
+        $task->tags()->detachOrFail($tag);
+
+        return response()->json([
+            'message' => 'Tag removed from task successfully.',
+            'data' => [
+                'tag' => (new TagResource($tag))->resolve(),
             ],
         ]);
     }

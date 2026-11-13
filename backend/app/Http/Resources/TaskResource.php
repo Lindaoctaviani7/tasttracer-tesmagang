@@ -24,6 +24,7 @@ class TaskResource extends JsonResource
                 'id' => $user->id,
                 'name' => $user->name,
             ])->all(),
+            'tags' => TagResource::collection($this->tags)->resolve(),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
         ];
