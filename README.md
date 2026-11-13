@@ -96,6 +96,7 @@ All task endpoints require a Sanctum bearer token. Admins can access every task;
 - `POST /api/tasks` creates a task for the authenticated user. It accepts `title` (required, maximum 100 characters), optional `description`, and optional boolean `is_completed` (defaults to `false`).
 - `GET /api/tasks/{task}`, `PUT /api/tasks/{task}`, and `DELETE /api/tasks/{task}` show, replace, and delete tasks subject to the same access policy. `PUT` requires a non-empty `title` up to 100 characters and accepts optional `description` and `is_completed`; `PATCH` remains available for partial updates.
 - `PUT /api/tasks/{task}/assignees` replaces the assignee list using `{ "user_ids": [1, 2] }`. Use an empty array to remove all assignees. Admins can manage assignees on any task; members need access to the task.
+- `GET /api/tasks/{task}/assignees` returns assignee profiles; `POST /api/tasks/{task}/assignees` adds one or more users using `{ "user_ids": [1, 2] }` without removing existing assignees; `DELETE /api/tasks/{task}/assignees/{userId}` removes one assignee. Re-adding an existing assignee does not create a duplicate. These endpoints use the same task access policy.
 
 User management requires the `admin` role:
 

@@ -4,10 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Enums\UserRole;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\AddTaskAssigneesRequest;
 use App\Http\Requests\ManageTaskAssigneesRequest;
 use App\Http\Requests\StoreTaskRequest;
 use App\Http\Requests\UpdateTaskRequest;
 use App\Http\Resources\TaskResource;
+use App\Http\Resources\UserResource;
 use App\Models\Task;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -112,6 +114,49 @@ class TaskController extends Controller
                     'id' => $user->id,
                     'name' => $user->name,
                 ])->all(),
+            ],
+        ]);
+    }
+
+    public function indexAssignees(Task $task): JsonResponse
+    {
+        Gate::authorize('manageAssignees', $task);
+        $task->load('assignees:id,name,email,role,created_at');
+
+        return response()->json([
+            'message' => 'Task assignees retrieved successfully.',
+            'data' => [
+                'assignees' => UserResource::collection($task->assignees)->resolve(),
+            ],
+        ]);
+    }
+
+    public function storeAssignees(AddTaskAssigneesRequest $request, Task $task): JsonResponse
+    {
+        Gate::authorize('manageAssignees', $task);
+
+        $task->assignees()->syncWithoutDetachingOrFail($request->validated('user_ids'));
+        $task->load('assignees:id,name,email,role,created_at');
+
+        return response()->json([
+            'message' => 'Task assignees added successfully.',
+            'data' => [
+                'assignees' => UserResource::collection($task->assignees)->resolve(),
+            ],
+        ]);
+    }
+
+    public function destroyAssignee(Task $task, int $userId): JsonResponse
+    {
+        Gate::authorize('manageAssignees', $task);
+
+        $assignee = $task->assignees()->whereKey($userId)->firstOrFail();
+        $task->assignees()->detachOrFail($assignee);
+
+        return response()->json([
+            'message' => 'Task assignee removed successfully.',
+            'data' => [
+                'assignee' => (new UserResource($assignee))->resolve(),
             ],
         ]);
     }

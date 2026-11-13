@@ -15,6 +15,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/user', [AuthController::class, 'user']);
 
     Route::apiResource('tasks', TaskController::class);
+    Route::get('/tasks/{task}/assignees', [TaskController::class, 'indexAssignees']);
+    Route::post('/tasks/{task}/assignees', [TaskController::class, 'storeAssignees']);
+    Route::delete('/tasks/{task}/assignees/{userId}', [TaskController::class, 'destroyAssignee']);
     Route::put('/tasks/{task}/assignees', [TaskController::class, 'updateAssignees']);
 
     Route::middleware('role:admin')->group(function (): void {
