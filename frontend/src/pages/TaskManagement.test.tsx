@@ -272,6 +272,76 @@ describe('task dashboard', () => {
     })
   })
 
+  it('updates only the selected task status and refreshes the dashboard summary', async () => {
+    const otherTask: Task = {
+      ...sampleTask,
+      id: 22,
+      title: 'Keep other task pending',
+      assignees: [],
+    }
+    const tasks = [sampleTask, otherTask]
+    let updatedTaskId: number | null = null
+    let updatedRequestBody: Record<string, unknown> | null = null
+    const adapter: AxiosAdapter = async (config) => {
+      if (config.url?.endsWith('/user')) {
+        return authenticatedUserResponse(config)
+      }
+
+      if (config.url?.endsWith('/tasks/21') && config.method === 'patch') {
+        updatedTaskId = 21
+        updatedRequestBody = JSON.parse(String(config.data)) as Record<string, unknown>
+        tasks[0] = { ...tasks[0], is_completed: updatedRequestBody.is_completed as boolean }
+
+        return taskResponse(config, tasks[0])
+      }
+
+      if (config.url?.endsWith('/tasks')) {
+        const params = config.params as Record<string, string | number | undefined>
+        const filteredTasks = params.status === 'completed'
+          ? tasks.filter((task) => task.is_completed)
+          : params.status === 'pending'
+            ? tasks.filter((task) => !task.is_completed)
+            : tasks
+
+        return response(config, {
+          message: 'Tasks retrieved successfully.',
+          data: {
+            tasks: filteredTasks,
+            pagination: {
+              current_page: 1,
+              per_page: Number(params.per_page ?? 10),
+              total: filteredTasks.length,
+              last_page: 1,
+            },
+          },
+        })
+      }
+
+      return response(config, { message: 'OK', data: {} })
+    }
+    apiClient.defaults.adapter = adapter
+    setup('/dashboard')
+    const userActions = userEvent.setup()
+    const summary = await screen.findByRole('region', { name: 'Ringkasan tugas' })
+
+    expect(within(summary).getByText('Total tugas').closest('article')?.textContent).toContain('2')
+    expect(within(summary).getByText('Sedang berjalan').closest('article')?.textContent).toContain('2')
+    expect(within(summary).getByText('Selesai').closest('article')?.textContent).toContain('0')
+
+    await userActions.click((await screen.findAllByRole('button', { name: 'Tandai Review sprint plan selesai' }))[0])
+
+    expect(await screen.findAllByRole('button', { name: 'Tandai Review sprint plan belum selesai' })).toHaveLength(2)
+    expect(screen.getAllByRole('button', { name: 'Tandai Keep other task pending selesai' })).toHaveLength(2)
+    await waitFor(() => {
+      expect(within(summary).getByText('Sedang berjalan').closest('article')?.textContent).toContain('1')
+      expect(within(summary).getByText('Selesai').closest('article')?.textContent).toContain('1')
+    })
+    expect(within(summary).getByText('Total tugas').closest('article')?.textContent).toContain('2')
+    expect(updatedTaskId).toBe(21)
+    expect(updatedRequestBody).toEqual({ is_completed: true })
+    expect(tasks[1].is_completed).toBe(false)
+  })
+
   it('updates task details and removes a tag from an existing task', async () => {
     let updatedTask = sampleTask
     const relationRequests: string[] = []
@@ -384,7 +454,7 @@ describe('task dashboard', () => {
         return authenticatedUserResponse(config)
       }
 
-      if (config.url?.endsWith('/tasks/21') && config.method === 'put') {
+      if (config.url?.endsWith('/tasks/21') && config.method === 'patch') {
         const requestBody = JSON.parse(String(config.data)) as { is_completed: boolean }
         updatedTask = { ...updatedTask, is_completed: requestBody.is_completed }
 

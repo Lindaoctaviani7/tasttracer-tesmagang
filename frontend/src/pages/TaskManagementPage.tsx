@@ -95,6 +95,20 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
     }
   }, [currentPage, filters])
 
+  const fetchSummary = useCallback(async (): Promise<TaskSummary> => {
+    const [allTasks, pendingTasks, completedTasks] = await Promise.all([
+      taskService.list({ per_page: 1 }),
+      taskService.list({ status: 'pending', per_page: 1 }),
+      taskService.list({ status: 'completed', per_page: 1 }),
+    ])
+
+    return {
+      total: allTasks.pagination.total,
+      pending: pendingTasks.pagination.total,
+      completed: completedTasks.pagination.total,
+    }
+  }, [])
+
   useEffect(() => {
     const timer = window.setTimeout(() => {
       void loadTasks()
@@ -119,18 +133,10 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
 
     let active = true
 
-    void Promise.all([
-      taskService.list({ per_page: 1 }),
-      taskService.list({ status: 'pending', per_page: 1 }),
-      taskService.list({ status: 'completed', per_page: 1 }),
-    ])
-      .then(([allTasks, pendingTasks, completedTasks]) => {
+    void fetchSummary()
+      .then((taskSummary) => {
         if (active) {
-          setSummary({
-            total: allTasks.pagination.total,
-            pending: pendingTasks.pagination.total,
-            completed: completedTasks.pagination.total,
-          })
+          setSummary(taskSummary)
         }
       })
       .catch((requestError: unknown) => {
@@ -142,7 +148,7 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
     return () => {
       active = false
     }
-  }, [page])
+  }, [fetchSummary, page])
 
   useEffect(() => {
     if (!editTaskId) {
@@ -261,13 +267,17 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
     setSuccess(null)
 
     try {
-      await taskService.update(task.id, {
-        title: task.title,
-        description: task.description,
-        is_completed: !task.is_completed,
-      })
-      setSuccess(task.is_completed ? 'Tugas ditandai belum selesai.' : 'Tugas ditandai selesai.')
+      const updatedTask = await taskService.updateStatus(task.id, !task.is_completed)
+      setSuccess(updatedTask.is_completed ? 'Tugas ditandai selesai.' : 'Tugas ditandai belum selesai.')
       await loadTasks()
+
+      if (page === 'dashboard') {
+        try {
+          setSummary(await fetchSummary())
+        } catch (summaryError: unknown) {
+          setError(`Status tugas tersimpan, tetapi ringkasan gagal diperbarui. ${getErrorMessage(summaryError)}`)
+        }
+      }
     } catch (requestError: unknown) {
       setError(getErrorMessage(requestError))
     } finally {

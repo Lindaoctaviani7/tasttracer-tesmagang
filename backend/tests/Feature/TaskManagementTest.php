@@ -227,6 +227,35 @@ class TaskManagementTest extends TestCase
         ]);
     }
 
+    public function test_updating_one_task_status_does_not_change_other_tasks(): void
+    {
+        $member = User::factory()->create();
+        $taskToComplete = Task::factory()->for($member, 'creator')->create([
+            'title' => 'Finish selected task',
+            'is_completed' => false,
+        ]);
+        $otherTask = Task::factory()->for($member, 'creator')->create([
+            'title' => 'Keep other task pending',
+            'is_completed' => false,
+        ]);
+
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$taskToComplete->id}", [
+            'is_completed' => true,
+        ])
+            ->assertOk()
+            ->assertJsonPath('data.task.id', $taskToComplete->id)
+            ->assertJsonPath('data.task.is_completed', true);
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $taskToComplete->id,
+            'is_completed' => true,
+        ]);
+        $this->assertDatabaseHas('tasks', [
+            'id' => $otherTask->id,
+            'is_completed' => false,
+        ]);
+    }
+
     public function test_put_rejects_an_empty_task_title(): void
     {
         $member = User::factory()->create();

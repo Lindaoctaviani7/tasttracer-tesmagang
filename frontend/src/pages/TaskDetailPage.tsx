@@ -80,11 +80,7 @@ export function TaskDetailPage() {
     setSuccess(null)
 
     try {
-      const updatedTask = await taskService.update(task.id, {
-        title: task.title,
-        description: task.description,
-        is_completed: !task.is_completed,
-      })
+      const updatedTask = await taskService.updateStatus(task.id, !task.is_completed)
       setTask(updatedTask)
       setSuccess(updatedTask.is_completed
         ? 'Tugas berhasil ditandai selesai.'

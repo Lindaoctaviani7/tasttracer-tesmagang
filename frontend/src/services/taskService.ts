@@ -57,6 +57,14 @@ export const taskService = {
     return response.data.data.task
   },
 
+  async updateStatus(taskId: number, isCompleted: boolean): Promise<Task> {
+    const response = await apiClient.patch<ApiResponse<{ task: Task }>>(`/tasks/${taskId}`, {
+      is_completed: isCompleted,
+    })
+
+    return response.data.data.task
+  },
+
   async remove(taskId: number): Promise<void> {
     await apiClient.delete<ApiResponse<null>>(`/tasks/${taskId}`)
   },
