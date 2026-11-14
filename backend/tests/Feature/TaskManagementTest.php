@@ -342,7 +342,7 @@ class TaskManagementTest extends TestCase
         ]);
     }
 
-    public function test_member_can_manage_assignees_on_an_accessible_task(): void
+    public function test_member_gets_403_when_managing_assignees_on_an_accessible_task(): void
     {
         $member = User::factory()->create();
         $newAssignee = User::factory()->create();
@@ -351,10 +351,9 @@ class TaskManagementTest extends TestCase
         $this->authenticateAs($member)->putJson("/api/tasks/{$task->id}/assignees", [
             'user_ids' => [$newAssignee->id],
         ])
-            ->assertOk()
-            ->assertJsonPath('data.assignees.0.id', $newAssignee->id);
+            ->assertForbidden();
 
-        $this->assertDatabaseHas('task_user', [
+        $this->assertDatabaseMissing('task_user', [
             'task_id' => $task->id,
             'user_id' => $newAssignee->id,
         ]);

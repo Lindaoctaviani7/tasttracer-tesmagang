@@ -19,6 +19,7 @@ export interface TaskFormValues {
 
 interface TaskFormModalProps {
   task?: Task
+  canManageAssignees: boolean
   isSaving: boolean
   onClose: () => void
   onSubmit: (values: TaskFormValues) => Promise<void>
@@ -51,7 +52,13 @@ function ToggleOption({
   )
 }
 
-export function TaskFormModal({ task, isSaving, onClose, onSubmit }: TaskFormModalProps) {
+export function TaskFormModal({
+  task,
+  canManageAssignees,
+  isSaving,
+  onClose,
+  onSubmit,
+}: TaskFormModalProps) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
   const [isCompleted, setIsCompleted] = useState(task?.is_completed ?? false)
@@ -78,25 +85,30 @@ export function TaskFormModal({ task, isSaving, onClose, onSubmit }: TaskFormMod
     setOptionError(null)
 
     try {
-      const [users, availableTags] = await Promise.all([
-        userService.listAssigneeOptions({ search: search || undefined, per_page: 50 }),
+      const [availableTags, users] = await Promise.all([
         tagService.listAll(),
+        canManageAssignees
+          ? userService.listAssigneeOptions({ search: search || undefined, per_page: 50 })
+          : Promise.resolve(null),
       ])
-      setAssigneeOptions((current) => {
-        const merged = new Map(current.map((option) => [option.id, option]))
-        for (const option of users.users) {
-          merged.set(option.id, option)
-        }
-
-        return Array.from(merged.values())
-      })
       setTags(availableTags)
+
+      if (users) {
+        setAssigneeOptions((current) => {
+          const merged = new Map(current.map((option) => [option.id, option]))
+          for (const option of users.users) {
+            merged.set(option.id, option)
+          }
+
+          return Array.from(merged.values())
+        })
+      }
     } catch (error: unknown) {
       setOptionError(getErrorMessage(error))
     } finally {
       setIsLoadingOptions(false)
     }
-  }, [])
+  }, [canManageAssignees])
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -203,54 +215,56 @@ export function TaskFormModal({ task, isSaving, onClose, onSubmit }: TaskFormMod
           </label>
         )}
 
-        <section>
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">Assignee</h3>
-              <p className="mt-0.5 text-xs text-slate-500">Pilih anggota yang mengerjakan tugas ini.</p>
+        {canManageAssignees && (
+          <section>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">Assignee</h3>
+                <p className="mt-0.5 text-xs text-slate-500">Pilih anggota yang mengerjakan tugas ini.</p>
+              </div>
+              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
+                {assigneeIds.length} dipilih
+              </span>
             </div>
-            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-              {assigneeIds.length} dipilih
-            </span>
-          </div>
-          {selectedAssignees.length > 0 && (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {selectedAssignees.map((assignee) => (
-                <button
-                  aria-label={`Hapus assignee ${assignee.name}`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+            {selectedAssignees.length > 0 && (
+              <div className="mt-3 flex flex-wrap gap-2">
+                {selectedAssignees.map((assignee) => (
+                  <button
+                    aria-label={`Hapus assignee ${assignee.name}`}
+                    className="inline-flex items-center gap-1.5 rounded-full bg-indigo-50 px-3 py-1.5 text-xs font-medium text-indigo-700 hover:bg-indigo-100"
+                    key={assignee.id}
+                    onClick={() => toggleAssignee(assignee.id)}
+                    type="button"
+                  >
+                    {assignee.name}<span aria-hidden="true">×</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            <input
+              className="mt-3 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
+              onChange={(event) => setAssigneeSearch(event.target.value)}
+              placeholder="Cari nama atau email anggota..."
+              type="search"
+              value={assigneeSearch}
+            />
+            <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-slate-100 p-1">
+              {isLoadingOptions ? (
+                <p className="px-3 py-4 text-center text-xs text-slate-500">Memuat anggota...</p>
+              ) : displayedAssignees.length === 0 ? (
+                <p className="px-3 py-4 text-center text-xs text-slate-500">Tidak ada anggota yang cocok.</p>
+              ) : displayedAssignees.map((assignee) => (
+                <ToggleOption
+                  checked={assigneeIds.includes(assignee.id)}
+                  description={assignee.email || undefined}
                   key={assignee.id}
-                  onClick={() => toggleAssignee(assignee.id)}
-                  type="button"
-                >
-                  {assignee.name}<span aria-hidden="true">×</span>
-                </button>
+                  label={assignee.name}
+                  onChange={() => toggleAssignee(assignee.id)}
+                />
               ))}
             </div>
-          )}
-          <input
-            className="mt-3 min-h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/10"
-            onChange={(event) => setAssigneeSearch(event.target.value)}
-            placeholder="Cari nama atau email anggota..."
-            type="search"
-            value={assigneeSearch}
-          />
-          <div className="mt-2 max-h-40 overflow-y-auto rounded-xl border border-slate-100 p-1">
-            {isLoadingOptions ? (
-              <p className="px-3 py-4 text-center text-xs text-slate-500">Memuat anggota dan tag...</p>
-            ) : displayedAssignees.length === 0 ? (
-              <p className="px-3 py-4 text-center text-xs text-slate-500">Tidak ada anggota yang cocok.</p>
-            ) : displayedAssignees.map((assignee) => (
-              <ToggleOption
-                checked={assigneeIds.includes(assignee.id)}
-                description={assignee.email || undefined}
-                key={assignee.id}
-                label={assignee.name}
-                onChange={() => toggleAssignee(assignee.id)}
-              />
-            ))}
-          </div>
-        </section>
+          </section>
+        )}
 
         <section>
           <div className="flex items-center justify-between gap-3">

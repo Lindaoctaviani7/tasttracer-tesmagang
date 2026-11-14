@@ -11,6 +11,7 @@ import { TaskPagination } from '../components/dashboard/TaskPagination'
 import { EmptyState } from '../components/feedback/EmptyState'
 import { ErrorState } from '../components/feedback/ErrorState'
 import { LoadingState } from '../components/feedback/LoadingState'
+import { useAuth } from '../hooks/useAuth'
 import { taskService, type TaskFilters } from '../services/taskService'
 import type { Pagination, Task } from '../types/api'
 
@@ -44,6 +45,8 @@ function relationFailureMessage(results: PromiseSettledResult<unknown>[]): strin
 }
 
 export function TaskManagementPage({ page, admin = false }: TaskManagementPageProps) {
+  const { user } = useAuth()
+  const canManageAssignees = user?.role === 'admin'
   const location = useLocation()
   const navigate = useNavigate()
   const [tasks, setTasks] = useState<Task[]>([])
@@ -202,7 +205,7 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
         })
 
         const relationOperations: Promise<unknown>[] = [
-          taskService.syncAssignees(editingTask.id, values.assigneeIds),
+          ...(canManageAssignees ? [taskService.syncAssignees(editingTask.id, values.assigneeIds)] : []),
           ...values.tagIds
             .filter((tagId) => !editingTask.tags.some((tag) => tag.id === tagId))
             .map((tagId) => taskService.addTags(editingTask.id, [tagId])),
@@ -214,7 +217,8 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
         if (isSuccessful(relationResults)) {
           setSuccess('Tugas berhasil diperbarui.')
         } else {
-          relationError = `Detail tugas tersimpan, tetapi sebagian perubahan assignee atau tag gagal diterapkan. ${relationFailureMessage(relationResults)}`
+          const relations = canManageAssignees ? 'assignee atau tag' : 'tag'
+          relationError = `Detail tugas tersimpan, tetapi sebagian perubahan ${relations} gagal diterapkan. ${relationFailureMessage(relationResults)}`
         }
       } else {
         const createdTask = await taskService.create({
@@ -224,7 +228,7 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
         })
         const relationOperations: Promise<unknown>[] = []
 
-        if (values.assigneeIds.length > 0) {
+        if (canManageAssignees && values.assigneeIds.length > 0) {
           relationOperations.push(taskService.addAssignees(createdTask.id, values.assigneeIds))
         }
 
@@ -236,7 +240,8 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
         if (isSuccessful(relationResults)) {
           setSuccess('Tugas berhasil dibuat.')
         } else {
-          relationError = `Tugas berhasil dibuat, tetapi sebagian assignee atau tag gagal ditambahkan. ${relationFailureMessage(relationResults)}`
+          const relations = canManageAssignees ? 'assignee atau tag' : 'tag'
+          relationError = `Tugas berhasil dibuat, tetapi sebagian ${relations} gagal ditambahkan. ${relationFailureMessage(relationResults)}`
         }
       }
 
@@ -412,6 +417,7 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
 
       {isCreateModalOpen && (
         <TaskFormModal
+          canManageAssignees={canManageAssignees}
           isSaving={isSaving}
           onClose={() => navigate('/tasks')}
           onSubmit={handleSaveTask}
@@ -425,6 +431,7 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
           </Modal>
         ) : (
           <TaskFormModal
+            canManageAssignees={canManageAssignees}
             isSaving={isSaving}
             onClose={() => navigate('/tasks')}
             onSubmit={handleSaveTask}

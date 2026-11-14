@@ -1,11 +1,11 @@
 import { AxiosError, AxiosHeaders, type AxiosAdapter } from 'axios'
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from '../App'
 import { apiClient } from '../api/client'
 import { saveAccessToken } from '../api/tokenStorage'
-import type { Task } from '../types/api'
+import type { Task, User } from '../types/api'
 
 const originalAdapter = apiClient.defaults.adapter
 const currentUser = {
@@ -14,6 +14,10 @@ const currentUser = {
   email: 'rina@example.test',
   role: 'member' as const,
   created_at: '2026-11-14T00:00:00.000000Z',
+}
+const adminUser = {
+  ...currentUser,
+  role: 'admin' as const,
 }
 const sampleTask: Task = {
   id: 21,
@@ -59,10 +63,13 @@ function taskListResponse(config: Parameters<AxiosAdapter>[0], tasks: Task[]) {
   })
 }
 
-function authenticatedUserResponse(config: Parameters<AxiosAdapter>[0]) {
+function authenticatedUserResponse(
+  config: Parameters<AxiosAdapter>[0],
+  user: User = currentUser,
+) {
   return response(config, {
     message: 'Authenticated user retrieved successfully.',
-    data: { user: currentUser },
+    data: { user },
   })
 }
 
@@ -128,7 +135,7 @@ describe('task dashboard', () => {
     const relationRequests: string[] = []
     const adapter: AxiosAdapter = async (config) => {
       if (config.url?.endsWith('/user')) {
-        return authenticatedUserResponse(config)
+        return authenticatedUserResponse(config, adminUser)
       }
 
       if (config.url?.includes('/tasks/21/')) {
@@ -171,6 +178,52 @@ describe('task dashboard', () => {
     expect((await screen.findAllByText('Review sprint plan')).length).toBeGreaterThan(0)
     expect(relationRequests).toContain('post:/tasks/21/assignees')
     expect(relationRequests).toContain('post:/tasks/21/tags')
+  })
+
+  it('hides assignee controls and skips assignee requests for members', async () => {
+    let assigneeOptionsRequested = false
+    const relationRequests: string[] = []
+    const adapter: AxiosAdapter = async (config) => {
+      if (config.url?.endsWith('/user')) {
+        return authenticatedUserResponse(config)
+      }
+
+      if (config.url?.endsWith('/users/assignee-options')) {
+        assigneeOptionsRequested = true
+      }
+
+      if (config.url?.includes('/assignees')) {
+        relationRequests.push(config.url)
+      }
+
+      if (config.url?.endsWith('/tags')) {
+        return tagsResponse(config)
+      }
+
+      if (config.url?.endsWith('/tasks') && config.method === 'post') {
+        return createdTaskResponse(config, sampleTask)
+      }
+
+      if (config.url?.endsWith('/tasks')) {
+        return taskListResponse(config, [sampleTask])
+      }
+
+      return response(config, { message: 'OK', data: {} })
+    }
+    apiClient.defaults.adapter = adapter
+    setup()
+    const userActions = userEvent.setup()
+
+    await userActions.click(await screen.findByRole('button', { name: /Tambah tugas/i }))
+    expect(screen.queryByRole('heading', { name: 'Assignee' })).toBeNull()
+    expect(screen.queryByPlaceholderText('Cari nama atau email anggota...')).toBeNull()
+    await userActions.type(await screen.findByLabelText('Judul tugas'), 'Review sprint plan')
+    await userActions.click(await screen.findByRole('checkbox', { name: 'Planning' }))
+    await userActions.click(screen.getByRole('button', { name: 'Buat tugas' }))
+
+    expect(await screen.findByText('Tugas berhasil dibuat.')).toBeTruthy()
+    expect(assigneeOptionsRequested).toBe(false)
+    expect(relationRequests).toHaveLength(0)
   })
 
   it('filters tasks using the status and search query parameters', async () => {
@@ -224,7 +277,7 @@ describe('task dashboard', () => {
     const relationRequests: string[] = []
     const adapter: AxiosAdapter = async (config) => {
       if (config.url?.endsWith('/user')) {
-        return authenticatedUserResponse(config)
+        return authenticatedUserResponse(config, adminUser)
       }
 
       if (config.url?.endsWith('/users/assignee-options')) {
@@ -349,6 +402,12 @@ describe('task dashboard', () => {
     const userActions = userEvent.setup()
 
     expect(await screen.findByRole('heading', { name: 'Review sprint plan' })).toBeTruthy()
+    const assigneeSection = screen.getByRole('heading', { name: 'Assignee' }).closest('section')
+    expect(assigneeSection).not.toBeNull()
+    if (assigneeSection) {
+      expect(within(assigneeSection).queryByRole('link', { name: 'Kelola' })).toBeNull()
+    }
+
     await userActions.click(screen.getByRole('button', { name: 'Tandai selesai' }))
 
     expect((await screen.findByRole('status')).textContent).toContain('Tugas berhasil ditandai selesai.')

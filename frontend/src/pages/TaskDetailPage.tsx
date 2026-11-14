@@ -7,6 +7,7 @@ import { DashboardShell } from '../components/dashboard/DashboardShell'
 import { TaskStatusBadge } from '../components/dashboard/TaskStatusBadge'
 import { ErrorState } from '../components/feedback/ErrorState'
 import { LoadingState } from '../components/feedback/LoadingState'
+import { useAuth } from '../hooks/useAuth'
 import { taskService } from '../services/taskService'
 import type { Task } from '../types/api'
 
@@ -31,6 +32,8 @@ function formatDate(value: string | null, includeTime = false): string {
 export function TaskDetailPage() {
   const { taskId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const canManageAssignees = user?.role === 'admin'
   const [task, setTask] = useState<Task | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isUpdating, setIsUpdating] = useState(false)
@@ -196,12 +199,14 @@ export function TaskDetailPage() {
                     <h2 className="font-semibold text-slate-900">Assignee</h2>
                     <p className="mt-1 text-sm text-slate-500">Anggota yang bertanggung jawab pada tugas ini.</p>
                   </div>
-                  <Link
-                    className="shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50"
-                    to={`/tasks/${task.id}/edit`}
-                  >
-                    Kelola
-                  </Link>
+                  {canManageAssignees && (
+                    <Link
+                      className="shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50"
+                      to={`/tasks/${task.id}/edit`}
+                    >
+                      Kelola
+                    </Link>
+                  )}
                 </div>
                 {task.assignees.length === 0 ? (
                   <p className="mt-5 rounded-xl bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">

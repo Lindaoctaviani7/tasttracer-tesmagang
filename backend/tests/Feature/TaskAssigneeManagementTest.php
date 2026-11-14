@@ -28,7 +28,7 @@ class TaskAssigneeManagementTest extends TestCase
             ->assertJsonMissingPath('data.assignees.0.password');
     }
 
-    public function test_member_can_list_assignees_for_a_task_they_are_assigned_to(): void
+    public function test_member_gets_403_when_listing_assignees_for_a_task_they_are_assigned_to(): void
     {
         $member = User::factory()->create();
         $task = Task::factory()->create();
@@ -36,10 +36,7 @@ class TaskAssigneeManagementTest extends TestCase
         $task->assignees()->attach([$member->id, $otherAssignee->id]);
 
         $this->authenticateAs($member)->getJson("/api/tasks/{$task->id}/assignees")
-            ->assertOk()
-            ->assertJsonCount(2, 'data.assignees')
-            ->assertJsonFragment(['id' => $member->id, 'email' => $member->email])
-            ->assertJsonFragment(['id' => $otherAssignee->id, 'email' => $otherAssignee->email]);
+            ->assertForbidden();
     }
 
     public function test_admin_can_add_a_single_assignee_to_any_task(): void
@@ -61,7 +58,7 @@ class TaskAssigneeManagementTest extends TestCase
         ]);
     }
 
-    public function test_member_can_add_multiple_assignees_to_a_task_they_created(): void
+    public function test_member_gets_403_when_adding_assignees_to_a_task_they_created(): void
     {
         $member = User::factory()->create();
         $task = Task::factory()->for($member, 'creator')->create();
@@ -70,12 +67,9 @@ class TaskAssigneeManagementTest extends TestCase
         $this->authenticateAs($member)->postJson("/api/tasks/{$task->id}/assignees", [
             'user_ids' => $assignees->modelKeys(),
         ])
-            ->assertOk()
-            ->assertJsonCount(2, 'data.assignees')
-            ->assertJsonFragment(['id' => $assignees[0]->id])
-            ->assertJsonFragment(['id' => $assignees[1]->id]);
+            ->assertForbidden();
 
-        $this->assertDatabaseCount('task_user', 2);
+        $this->assertDatabaseCount('task_user', 0);
     }
 
     public function test_adding_an_existing_assignee_does_not_create_a_duplicate(): void
@@ -156,7 +150,7 @@ class TaskAssigneeManagementTest extends TestCase
         ]);
     }
 
-    public function test_member_can_remove_an_assignee_from_a_task_they_are_assigned_to(): void
+    public function test_member_gets_403_when_removing_an_assignee_from_a_task_they_are_assigned_to(): void
     {
         $member = User::factory()->create();
         $task = Task::factory()->create();
@@ -164,10 +158,9 @@ class TaskAssigneeManagementTest extends TestCase
         $task->assignees()->attach([$member->id, $assigneeToRemove->id]);
 
         $this->authenticateAs($member)->deleteJson("/api/tasks/{$task->id}/assignees/{$assigneeToRemove->id}")
-            ->assertOk()
-            ->assertJsonPath('data.assignee.id', $assigneeToRemove->id);
+            ->assertForbidden();
 
-        $this->assertDatabaseMissing('task_user', [
+        $this->assertDatabaseHas('task_user', [
             'task_id' => $task->id,
             'user_id' => $assigneeToRemove->id,
         ]);
@@ -177,30 +170,26 @@ class TaskAssigneeManagementTest extends TestCase
         ]);
     }
 
-    public function test_member_cannot_list_add_or_remove_assignees_on_an_unrelated_task(): void
+    public function test_member_gets_403_when_syncing_assignees_even_for_a_task_they_created(): void
     {
         $member = User::factory()->create();
-        $task = Task::factory()->create();
-        $assignee = User::factory()->create();
-        $task->assignees()->attach($assignee);
+        $task = Task::factory()->for($member, 'creator')->create();
+        $existingAssignee = User::factory()->create();
+        $newAssignee = User::factory()->create();
+        $task->assignees()->attach($existingAssignee);
 
-        $this->authenticateAs($member)->getJson("/api/tasks/{$task->id}/assignees")
-            ->assertForbidden();
-
-        $this->authenticateAs($member)->postJson("/api/tasks/{$task->id}/assignees", [
-            'user_ids' => [$member->id],
-        ])->assertForbidden();
-
-        $this->authenticateAs($member)->deleteJson("/api/tasks/{$task->id}/assignees/{$assignee->id}")
+        $this->authenticateAs($member)->putJson("/api/tasks/{$task->id}/assignees", [
+            'user_ids' => [$newAssignee->id],
+        ])
             ->assertForbidden();
 
         $this->assertDatabaseHas('task_user', [
             'task_id' => $task->id,
-            'user_id' => $assignee->id,
+            'user_id' => $existingAssignee->id,
         ]);
         $this->assertDatabaseMissing('task_user', [
             'task_id' => $task->id,
-            'user_id' => $member->id,
+            'user_id' => $newAssignee->id,
         ]);
     }
 

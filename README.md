@@ -103,6 +103,24 @@ npm run dev
 
 Frontend tersedia di `http://localhost:5173`. `VITE_API_URL=/api` menggunakan Vite proxy; `API_PROXY_TARGET` pada `frontend/.env` secara default menunjuk ke backend lokal di port 8000. Ubah nilai tersebut hanya jika backend berjalan pada alamat berbeda.
 
+### Cara cepat Windows
+
+Jika frontend menampilkan **“Server API mengalami gangguan”** atau terminal Vite menunjukkan `ECONNREFUSED 127.0.0.1:8000`, backend belum berjalan. Dari root project, gunakan skrip ini untuk menyiapkan konfigurasi/migrasi dan membuka backend serta frontend di terminal terpisah:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-dev.ps1
+```
+
+Untuk juga membuat/memperbarui akun demo pada database lokal:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\start-dev.ps1 -SeedDemo
+```
+
+Tanpa `-SeedDemo`, skrip tidak mengubah password akun demo. Untuk percobaan aman, buka `http://localhost:5173/register`, daftar memakai alamat email baru dan password yang memenuhi syarat, lalu masuk memakai kredensial yang sama. Setelah sukses, aplikasi mengarahkan ke dashboard.
+
+Jika frontend dibuka dari perangkat lain dalam jaringan lokal, buka `http://<IP-komputer-development>:5173/login`; backend tetap harus dijalankan pada komputer tersebut. Pastikan firewall Windows mengizinkan koneksi jaringan lokal ke port 5173. Vite mem-proxy API ke `127.0.0.1:8000` pada komputer host. Ini hanya konfigurasi development; jangan mengirim password melalui jaringan publik atau HTTP tanpa TLS.
+
 ## Konfigurasi SQLite
 
 `backend/.env.example` menggunakan:

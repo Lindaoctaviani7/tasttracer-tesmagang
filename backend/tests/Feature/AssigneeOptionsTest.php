@@ -11,12 +11,12 @@ class AssigneeOptionsTest extends TestCase
 {
     use LazilyRefreshDatabase;
 
-    public function test_authenticated_user_can_search_and_paginate_assignee_options(): void
+    public function test_admin_can_search_and_paginate_assignee_options(): void
     {
         User::factory()->create(['name' => 'Available One', 'email' => 'one@example.test']);
         User::factory()->create(['name' => 'Available Two', 'email' => 'two@example.test']);
         User::factory()->create(['name' => 'Other Person', 'email' => 'other@example.test']);
-        Sanctum::actingAs(User::factory()->create());
+        Sanctum::actingAs(User::factory()->admin()->create());
 
         $this->getJson('/api/users/assignee-options?search=available&per_page=1')
             ->assertOk()
@@ -36,9 +36,16 @@ class AssigneeOptionsTest extends TestCase
         $this->getJson('/api/users/assignee-options')->assertUnauthorized();
     }
 
-    public function test_assignee_options_reject_invalid_pagination_and_search_values(): void
+    public function test_member_gets_403_when_requesting_assignee_options(): void
     {
         Sanctum::actingAs(User::factory()->create());
+
+        $this->getJson('/api/users/assignee-options')->assertForbidden();
+    }
+
+    public function test_assignee_options_reject_invalid_pagination_and_search_values(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
 
         $this->getJson('/api/users/assignee-options?page=0&per_page=101')
             ->assertUnprocessable()

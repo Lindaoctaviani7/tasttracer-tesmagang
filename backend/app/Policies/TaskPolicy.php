@@ -35,7 +35,7 @@ class TaskPolicy
 
     public function manageAssignees(User $user, Task $task): bool
     {
-        return $this->canAccess($user, $task);
+        return $user->role === UserRole::Admin;
     }
 
     public function manageTags(User $user, Task $task): bool

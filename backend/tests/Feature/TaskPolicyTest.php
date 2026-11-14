@@ -44,12 +44,17 @@ class TaskPolicyTest extends TestCase
         $task = Task::factory()->for($creator, 'creator')->create();
         $task->assignees()->attach($assignee);
 
-        foreach (['update', 'delete', 'manageAssignees'] as $ability) {
+        foreach (['update', 'delete'] as $ability) {
             $this->assertTrue($admin->can($ability, $task));
             $this->assertTrue($creator->can($ability, $task));
             $this->assertTrue($assignee->can($ability, $task));
             $this->assertFalse($otherMember->can($ability, $task));
         }
+
+        $this->assertTrue($admin->can('manageAssignees', $task));
+        $this->assertFalse($creator->can('manageAssignees', $task));
+        $this->assertFalse($assignee->can('manageAssignees', $task));
+        $this->assertFalse($otherMember->can('manageAssignees', $task));
     }
 
     public function test_authenticated_roles_can_create_tasks(): void
