@@ -20,6 +20,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/users/assignee-options', AssigneeOptionsController::class);
 
     Route::patch('/tasks/{task}/status', [TaskController::class, 'updateStatus']);
+    Route::patch('/tasks/{task}/submission', [TaskController::class, 'submitWork']);
     Route::apiResource('tasks', TaskController::class);
     Route::get('/tasks/{task}/assignees', [TaskController::class, 'indexAssignees']);
     Route::post('/tasks/{task}/assignees', [TaskController::class, 'storeAssignees']);

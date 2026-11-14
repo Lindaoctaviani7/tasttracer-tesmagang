@@ -9,6 +9,7 @@ use App\Http\Requests\IndexTasksRequest;
 use App\Http\Requests\ManageTaskAssigneesRequest;
 use App\Http\Requests\ManageTaskTagsRequest;
 use App\Http\Requests\StoreTaskRequest;
+use App\Http\Requests\SubmitTaskWorkRequest;
 use App\Http\Requests\UpdateTaskRequest;
 use App\Http\Requests\UpdateTaskStatusRequest;
 use App\Http\Resources\TagResource;
@@ -41,7 +42,25 @@ class TaskController extends Controller
         $query
             ->when(
                 isset($filters['status']),
-                fn (Builder $query) => $query->where('is_completed', $filters['status'] === 'completed'),
+                function (Builder $query) use ($filters, $user): void {
+                    $isCompleted = $filters['status'] === 'completed';
+
+                    if ($user->role === UserRole::Admin) {
+                        $query->where('is_completed', $isCompleted);
+
+                        return;
+                    }
+
+                    $query->where(function (Builder $query) use ($isCompleted, $user): void {
+                        $query->where(function (Builder $createdTasks) use ($isCompleted, $user): void {
+                            $createdTasks->where('created_by', $user->id)
+                                ->where('is_completed', $isCompleted);
+                        })->orWhereHas('assignees', function (Builder $assignees) use ($isCompleted, $user): void {
+                            $assignees->whereKey($user->id)
+                                ->where('task_user.status', $isCompleted ? 'completed' : 'in_progress');
+                        });
+                    });
+                },
             )
             ->when(
                 filled($filters['search'] ?? null),
@@ -108,12 +127,36 @@ class TaskController extends Controller
 
     public function updateStatus(UpdateTaskStatusRequest $request, Task $task): JsonResponse
     {
-        Gate::authorize('updateStatus', [$task, $request->boolean('is_completed')]);
+        Gate::authorize('updateStatus', $task);
         $task->update($request->validated());
         $task->load(['creator:id,name', 'assignees:id,name', 'tags']);
 
         return response()->json([
             'message' => 'Task status updated successfully.',
+            'data' => ['task' => (new TaskResource($task))->resolve()],
+        ]);
+    }
+
+    public function submitWork(SubmitTaskWorkRequest $request, Task $task): JsonResponse
+    {
+        $validated = $request->validated();
+        $pivotData = ['status' => $validated['status']];
+
+        if (array_key_exists('submission', $validated)) {
+            $pivotData['submission'] = $validated['submission'];
+        }
+
+        DB::transaction(function () use ($task, $request, $pivotData): void {
+            $task->assignees()->updateExistingPivot($request->user()->id, $pivotData);
+            $hasIncompleteAssignees = $task->assignees()
+                ->wherePivot('status', '!=', 'completed')
+                ->exists();
+            $task->update(['is_completed' => ! $hasIncompleteAssignees]);
+        });
+        $task->load(['creator:id,name', 'assignees:id,name', 'tags']);
+
+        return response()->json([
+            'message' => 'Task progress and work result submitted successfully.',
             'data' => ['task' => (new TaskResource($task))->resolve()],
         ]);
     }
@@ -133,7 +176,10 @@ class TaskController extends Controller
     {
         Gate::authorize('manageAssignees', $task);
 
-        DB::transaction(fn () => $task->assignees()->sync($request->validated('user_ids')));
+        DB::transaction(function () use ($task, $request): void {
+            $task->assignees()->sync($request->validated('user_ids'));
+            $this->syncTaskCompletionFromAssignees($task);
+        });
         $task->load('assignees:id,name');
 
         return response()->json([
@@ -165,6 +211,7 @@ class TaskController extends Controller
         Gate::authorize('manageAssignees', $task);
 
         $task->assignees()->syncWithoutDetachingOrFail($request->validated('user_ids'));
+        $this->syncTaskCompletionFromAssignees($task);
         $task->load('assignees:id,name,email,role,created_at');
 
         return response()->json([
@@ -181,6 +228,7 @@ class TaskController extends Controller
 
         $assignee = $task->assignees()->whereKey($userId)->firstOrFail();
         $task->assignees()->detachOrFail($assignee);
+        $this->syncTaskCompletionFromAssignees($task);
 
         return response()->json([
             'message' => 'Task assignee removed successfully.',
@@ -218,5 +266,19 @@ class TaskController extends Controller
                 'tag' => (new TagResource($tag))->resolve(),
             ],
         ]);
+    }
+
+    private function syncTaskCompletionFromAssignees(Task $task): void
+    {
+        if (! $task->assignees()->exists()) {
+            $task->update(['is_completed' => false]);
+
+            return;
+        }
+
+        $hasIncompleteAssignees = $task->assignees()
+            ->where('task_user.status', '!=', 'completed')
+            ->exists();
+        $task->update(['is_completed' => ! $hasIncompleteAssignees]);
     }
 }

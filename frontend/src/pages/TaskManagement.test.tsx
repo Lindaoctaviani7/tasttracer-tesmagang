@@ -26,7 +26,8 @@ const sampleTask: Task = {
   is_completed: false,
   created_by: 8,
   creator: { id: 8, name: currentUser.name },
-  assignees: [{ id: 9, name: 'Maya Putri' }],
+  assignees: [{ id: 9, name: 'Maya Putri', status: null, submission: null }],
+  my_assignment: null,
   tags: [{ id: 3, name: 'Planning', created_at: null, updated_at: null }],
   created_at: '2026-11-14T00:00:00.000000Z',
   updated_at: '2026-11-14T00:00:00.000000Z',
@@ -131,6 +132,51 @@ afterEach(() => {
 })
 
 describe('task dashboard', () => {
+  it('shows each assignee status and submitted result on admin task details', async () => {
+    const task: Task = {
+      ...sampleTask,
+      created_by: 2,
+      creator: { id: 2, name: 'Admin User' },
+      assignees: [
+        {
+          id: 9,
+          name: 'Maya Putri',
+          status: 'completed',
+          submission: 'Sprint plan has been reviewed.',
+        },
+        {
+          id: 10,
+          name: 'Budi Santoso',
+          status: 'in_progress',
+          submission: 'Reviewing the remaining estimates.',
+        },
+      ],
+    }
+    const adapter: AxiosAdapter = async (config) => {
+      if (config.url?.endsWith('/user')) {
+        return authenticatedUserResponse(config, adminUser)
+      }
+
+      if (config.url?.endsWith('/tasks/21')) {
+        return taskResponse(config, task)
+      }
+
+      return response(config, { message: 'OK', data: {} })
+    }
+    apiClient.defaults.adapter = adapter
+    setup('/tasks/21')
+
+    const mayaRow = (await screen.findByText('Maya Putri')).closest('li')
+    const budiRow = (await screen.findByText('Budi Santoso')).closest('li')
+
+    expect(mayaRow).not.toBeNull()
+    expect(budiRow).not.toBeNull()
+    expect(within(mayaRow as HTMLElement).getByText('Selesai')).toBeTruthy()
+    expect(within(mayaRow as HTMLElement).getByText('Hasil: Sprint plan has been reviewed.')).toBeTruthy()
+    expect(within(budiRow as HTMLElement).getByText('Berjalan')).toBeTruthy()
+    expect(within(budiRow as HTMLElement).getByText('Hasil: Reviewing the remaining estimates.')).toBeTruthy()
+  })
+
   it('creates a task and connects selected assignees and tags', async () => {
     const relationRequests: string[] = []
     const adapter: AxiosAdapter = async (config) => {
@@ -351,21 +397,39 @@ describe('task dashboard', () => {
     expect(tasks[1].is_completed).toBe(false)
   })
 
-  it('lets an assignee complete an admin task but not edit or reopen it', async () => {
+  it('lets an assignee update their progress and submit a result without editing the admin task', async () => {
     let assignedTask: Task = {
       ...sampleTask,
       created_by: 2,
       creator: { id: 2, name: 'Admin User' },
-      assignees: [{ id: currentUser.id, name: currentUser.name }],
+      assignees: [{
+        id: currentUser.id,
+        name: currentUser.name,
+        status: 'in_progress',
+        submission: null,
+      }],
+      my_assignment: { status: 'in_progress', submission: null },
     }
     const adapter: AxiosAdapter = async (config) => {
       if (config.url?.endsWith('/user')) {
         return authenticatedUserResponse(config)
       }
 
-      if (config.url?.endsWith('/tasks/21/status') && config.method === 'patch') {
-        const requestBody = JSON.parse(String(config.data)) as { is_completed: boolean }
-        assignedTask = { ...assignedTask, is_completed: requestBody.is_completed }
+      if (config.url?.endsWith('/tasks/21/submission') && config.method === 'patch') {
+        const requestBody = JSON.parse(String(config.data)) as {
+          status: 'in_progress' | 'completed'
+          submission: string | null
+        }
+        assignedTask = {
+          ...assignedTask,
+          is_completed: requestBody.status === 'completed',
+          my_assignment: { status: requestBody.status, submission: requestBody.submission },
+          assignees: assignedTask.assignees.map((assignee) => ({
+            ...assignee,
+            status: requestBody.status,
+            submission: requestBody.submission,
+          })),
+        }
 
         return taskResponse(config, assignedTask)
       }
@@ -390,16 +454,38 @@ describe('task dashboard', () => {
       name: 'Ubah status tugas Review sprint plan, saat ini Berjalan',
     }))[0])
 
-    expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual(['Selesai'])
+    expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual([
+      'Berjalan',
+      'Selesai',
+    ])
     await userActions.click(screen.getByRole('menuitemradio', { name: 'Selesai' }))
+    await userActions.type(
+      await screen.findByLabelText('Hasil pekerjaan'),
+      'Pekerjaan sudah selesai dan ditinjau.',
+    )
+    await userActions.click(screen.getByRole('button', { name: 'Kirim progres dan hasil' }))
 
     expect(await screen.findAllByRole('button', {
       name: 'Ubah status tugas Review sprint plan, saat ini Selesai',
     })).toHaveLength(2)
+    expect(await screen.findByText('Status selesai dan hasil pekerjaan berhasil dikirim.')).toBeTruthy()
     expect(assignedTask.is_completed).toBe(true)
-    expect((await screen.findAllByRole('button', {
+    expect(assignedTask.my_assignment?.submission).toBe('Pekerjaan sudah selesai dan ditinjau.')
+
+    await userActions.click((await screen.findAllByRole('button', {
       name: 'Ubah status tugas Review sprint plan, saat ini Selesai',
-    }))[0].hasAttribute('disabled')).toBe(true)
+    }))[0])
+    await userActions.click(screen.getByRole('menuitemradio', { name: 'Berjalan' }))
+    const submissionField = await screen.findByLabelText('Hasil pekerjaan')
+    await userActions.clear(submissionField)
+    await userActions.type(submissionField, 'Melanjutkan revisi hasil.')
+    await userActions.click(screen.getByRole('button', { name: 'Kirim progres dan hasil' }))
+
+    expect(await screen.findAllByRole('button', {
+      name: 'Ubah status tugas Review sprint plan, saat ini Berjalan',
+    })).toHaveLength(2)
+    expect(assignedTask.is_completed).toBe(false)
+    expect(assignedTask.my_assignment?.submission).toBe('Melanjutkan revisi hasil.')
   })
 
   it('updates task details and removes a tag from an existing task', async () => {

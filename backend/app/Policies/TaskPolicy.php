@@ -29,14 +29,15 @@ class TaskPolicy
             || $task->created_by === $user->id;
     }
 
-    public function updateStatus(User $user, Task $task, bool $isCompleted): bool
+    public function updateStatus(User $user, Task $task): bool
     {
-        if ($user->role === UserRole::Admin || $task->created_by === $user->id) {
-            return true;
-        }
+        return ! $task->assignees()->exists()
+            && ($user->role === UserRole::Admin || $task->created_by === $user->id);
+    }
 
-        return $isCompleted
-            && ! $task->is_completed
+    public function submitWork(User $user, Task $task): bool
+    {
+        return $user->role === UserRole::Member
             && $task->assignees()->whereKey($user->id)->exists();
     }
 

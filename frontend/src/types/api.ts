@@ -15,6 +15,7 @@ export interface PaginatedCollection {
 }
 
 export type UserRole = 'admin' | 'member'
+export type AssignmentStatus = 'in_progress' | 'completed'
 
 export interface User {
   id: number
@@ -47,6 +48,8 @@ export interface Tag {
 export interface TaskAssignee {
   id: number
   name: string
+  status: AssignmentStatus | null
+  submission: string | null
 }
 
 export interface Task {
@@ -57,6 +60,10 @@ export interface Task {
   created_by: number
   creator: Pick<User, 'id' | 'name'>
   assignees: TaskAssignee[]
+  my_assignment: {
+    status: AssignmentStatus
+    submission: string | null
+  } | null
   tags: Tag[]
   created_at: string | null
   updated_at: string | null

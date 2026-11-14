@@ -51,11 +51,12 @@ class TaskPolicyTest extends TestCase
             $this->assertFalse($otherMember->can($ability, $task));
         }
 
-        $this->assertTrue($admin->can('updateStatus', [$task, false]));
-        $this->assertTrue($creator->can('updateStatus', [$task, false]));
-        $this->assertTrue($assignee->can('updateStatus', [$task, true]));
-        $this->assertFalse($assignee->can('updateStatus', [$task, false]));
-        $this->assertFalse($otherMember->can('updateStatus', [$task, true]));
+        $this->assertFalse($admin->can('updateStatus', $task));
+        $this->assertFalse($creator->can('updateStatus', $task));
+        $this->assertFalse($assignee->can('updateStatus', $task));
+        $this->assertTrue($assignee->can('submitWork', $task));
+        $this->assertFalse($admin->can('submitWork', $task));
+        $this->assertFalse($otherMember->can('submitWork', $task));
 
         $this->assertTrue($admin->can('manageAssignees', $task));
         $this->assertFalse($creator->can('manageAssignees', $task));

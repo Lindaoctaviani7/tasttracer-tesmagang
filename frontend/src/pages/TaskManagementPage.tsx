@@ -8,12 +8,13 @@ import { Modal } from '../components/dashboard/Modal'
 import { TaskFormModal, type TaskFormValues } from '../components/dashboard/TaskFormModal'
 import { TaskList } from '../components/dashboard/TaskList'
 import { TaskPagination } from '../components/dashboard/TaskPagination'
+import { TaskSubmissionForm } from '../components/dashboard/TaskSubmissionForm'
 import { EmptyState } from '../components/feedback/EmptyState'
 import { ErrorState } from '../components/feedback/ErrorState'
 import { LoadingState } from '../components/feedback/LoadingState'
 import { useAuth } from '../hooks/useAuth'
 import { taskService, type TaskFilters } from '../services/taskService'
-import type { Pagination, Task } from '../types/api'
+import type { AssignmentStatus, Pagination, Task } from '../types/api'
 
 interface TaskManagementPageProps {
   page: 'dashboard' | 'tasks'
@@ -65,6 +66,8 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
   const [isDeleting, setIsDeleting] = useState(false)
   const [editingTask, setEditingTask] = useState<Task | undefined>()
   const [isLoadingEditingTask, setIsLoadingEditingTask] = useState(false)
+  const [workSubmission, setWorkSubmission] = useState<{ task: Task; status: AssignmentStatus } | null>(null)
+  const [isSubmittingWork, setIsSubmittingWork] = useState(false)
 
   const isCreateModalOpen = location.pathname === '/tasks/new'
   const editRouteMatch = location.pathname.match(/^\/tasks\/(\d+)\/edit$/)
@@ -292,6 +295,35 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
     }
   }
 
+  async function handleSubmitWork(status: AssignmentStatus, submission: string) {
+    if (!workSubmission) {
+      return
+    }
+
+    setIsSubmittingWork(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      await taskService.submitWork(workSubmission.task.id, status, submission)
+      setWorkSubmission(null)
+      setSuccess(status === 'completed'
+        ? 'Status selesai dan hasil pekerjaan berhasil dikirim.'
+        : 'Progres dan hasil pekerjaan berhasil diperbarui.')
+      await loadTasks()
+
+      if (page === 'dashboard') {
+        try {
+          setSummary(await fetchSummary())
+        } catch (summaryError: unknown) {
+          setError(`Progres tersimpan, tetapi ringkasan gagal diperbarui. ${getErrorMessage(summaryError)}`)
+        }
+      }
+    } finally {
+      setIsSubmittingWork(false)
+    }
+  }
+
   async function handleDeleteTask() {
     if (!deletingTask) {
       return
@@ -422,6 +454,7 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
                 isAdmin={user?.role === 'admin'}
                 isUpdatingTaskId={isUpdatingTaskId}
                 onDelete={setDeletingTask}
+                onSelectAssignmentStatus={(task, status) => setWorkSubmission({ task, status })}
                 onUpdateStatus={(task, isCompleted) => void handleUpdateStatus(task, isCompleted)}
                 tasks={tasks}
               />
@@ -467,6 +500,25 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
           onConfirm={() => void handleDeleteTask()}
           title="Hapus tugas?"
         />
+      )}
+
+      {workSubmission && (
+        <Modal
+          description="Ubah progres penugasan Anda dan kirim hasil pekerjaan kepada admin."
+          onClose={() => {
+            if (!isSubmittingWork) {
+              setWorkSubmission(null)
+            }
+          }}
+          title={`Kirim hasil: ${workSubmission.task.title}`}
+        >
+          <TaskSubmissionForm
+            initialStatus={workSubmission.status}
+            initialSubmission={workSubmission.task.my_assignment?.submission ?? null}
+            isSaving={isSubmittingWork}
+            onSubmit={handleSubmitWork}
+          />
+        </Modal>
       )}
     </DashboardShell>
   )

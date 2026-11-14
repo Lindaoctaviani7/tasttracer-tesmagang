@@ -43,7 +43,7 @@ class TaskFilteringTest extends TestCase
         $member = User::factory()->create();
         $createdCompleted = Task::factory()->for($member, 'creator')->completed()->create();
         $assignedCompleted = Task::factory()->completed()->create();
-        $assignedCompleted->assignees()->attach($member);
+        $assignedCompleted->assignees()->attach($member, ['status' => 'completed']);
         $createdPending = Task::factory()->for($member, 'creator')->create();
         $unrelatedCompleted = Task::factory()->completed()->create();
         $unrelatedPending = Task::factory()->create();
@@ -81,7 +81,7 @@ class TaskFilteringTest extends TestCase
             'title' => 'Review the draft',
         ]);
         $assignedMatch = Task::factory()->create(['title' => 'Review assigned work']);
-        $assignedMatch->assignees()->attach($member);
+        $assignedMatch->assignees()->attach($member, ['status' => 'completed']);
         Task::factory()->create(['title' => 'Review another member task']);
         Task::factory()->for($member, 'creator')->create(['title' => 'Finish unrelated report']);
 
@@ -124,7 +124,7 @@ class TaskFilteringTest extends TestCase
             'title' => 'Review assigned item',
             'created_at' => now()->addMinutes(3),
         ]);
-        $assignedMatch->assignees()->attach($member);
+        $assignedMatch->assignees()->attach($member, ['status' => 'completed']);
         Task::factory()->for($member, 'creator')->create(['title' => 'Review pending item']);
         Task::factory()->completed()->create(['title' => 'Review unrelated item']);
 

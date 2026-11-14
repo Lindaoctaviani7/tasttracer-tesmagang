@@ -6,7 +6,7 @@ Aplikasi internal untuk mengelola tugas tim dengan backend Laravel REST API dan 
 
 - Registrasi member, login, logout, dan profil pengguna terautentikasi.
 - CRUD tugas, pencarian, filter status, pagination, serta pengelolaan assignee dan tag.
-- Hak akses tugas berdasarkan role, pembuat, dan assignee; status tugas diperbarui per tugas.
+- Hak akses tugas berdasarkan role, pembuat, dan assignee; progres dan hasil kerja disimpan per assignee.
 - Fitur admin: ringkasan statistik, manajemen seluruh tugas, pencarian dan filter pengguna, detail pengguna, serta perubahan role.
 - Seeder berisi akun demo dan data tugas lokal.
 
@@ -184,8 +184,8 @@ Password tersebut hanya untuk development dan berasal dari seeder lokal. Jangan 
 ## Role dan hak akses
 
 - **Admin:** dapat melihat dan mengelola semua tugas, assignee, tag master, pengguna dan role, serta statistik keseluruhan.
-- **Member:** dapat melihat tugas yang dibuat sendiri atau ditugaskan kepadanya. Member hanya dapat mengubah/menghapus detail tugas yang dibuat sendiri; untuk tugas yang ditugaskan admin, member hanya dapat menandai selesai dan tidak dapat mengedit detail, menghapus, mengelola assignee/tag, atau membuka kembali tugas yang selesai.
-- Perubahan status assignee berlaku pada tugas tersebut dan terlihat di akun admin. Admin dan pembuat tugas dapat memilih status berjalan atau selesai.
+- **Member:** dapat membuat dan mengedit tugas miliknya sendiri. Untuk tugas dari admin yang ditugaskan kepadanya, hanya dapat mengubah status per penugasan antara sedang berjalan/selesai dan mengirim hasil pekerjaan; detail tugas, assignee, tag, dan penghapusan tetap dikelola admin.
+- Status dan hasil tiap assignee bersifat mandiri. Admin dapat melihat progres dan hasil yang dikirim masing-masing member; tugas admin dianggap selesai jika semua assignee telah menyelesaikannya.
 - Endpoint admin dilindungi middleware backend. Menyembunyikan navigasi frontend bukan satu-satunya lapisan otorisasi.
 - Endpoint registrasi dan login bersifat publik. `GET /api/health` bersifat publik untuk healthcheck. Endpoint bisnis lainnya memerlukan Sanctum bearer token.
 
@@ -204,7 +204,8 @@ Semua endpoint diawali `/api`. Endpoint terproteksi memerlukan header `Authoriza
 | POST | `/tasks` | Terautentikasi | Membuat tugas dengan `created_by` dari token |
 | GET | `/tasks/{task}` | Terautentikasi + policy | Detail tugas |
 | PUT, PATCH | `/tasks/{task}` | Admin atau pembuat tugas | Memperbarui detail tugas (bukan status) |
-| PATCH | `/tasks/{task}/status` | Admin/pembuat; assignee hanya dapat menandai selesai | Mengubah status tugas tersebut |
+| PATCH | `/tasks/{task}/status` | Admin/pembuat untuk tugas tanpa assignee | Mengubah status tugas pribadi/tanpa assignee |
+| PATCH | `/tasks/{task}/submission` | Member yang ditugaskan | Mengubah status penugasan sendiri dan mengirim hasil pekerjaan; hasil wajib saat status selesai |
 | DELETE | `/tasks/{task}` | Terautentikasi + policy | Menghapus tugas |
 | GET | `/tasks/{task}/assignees` | Terautentikasi + policy | Daftar assignee |
 | POST | `/tasks/{task}/assignees` | Terautentikasi + policy | Menambahkan assignee |
@@ -242,6 +243,7 @@ Jalankan test frontend, lint, dan production build dari `frontend`:
 ```powershell
 Set-Location frontend
 npm test
+npm.cmd run dev
 npm run lint
 npm run build
 ```
@@ -254,5 +256,6 @@ Suite backend menggunakan SQLite in-memory agar tidak mengubah database lokal. F
 - Dockerfile dan Compose ditujukan untuk development. Backend menggunakan `php artisan serve`, frontend menggunakan Vite dev server; deployment production memerlukan server/proxy dan konfigurasi runtime tersendiri.
 - Token Sanctum dikirim sebagai bearer token oleh frontend. Password tidak disimpan di browser.
 - Status `is_completed` disimpan pada tugas, sehingga penyelesaian oleh assignee langsung tercermin pada tugas yang sama di dashboard admin.
+- Status dan hasil untuk tugas admin disimpan pada relasi assignee (`task_user`), bukan pada detail tugas. Kolom hasil menerima teks atau tautan (maksimal 10.000 karakter); unggahan berkas bukan bagian dari alur pengumpulan saat ini.
 - Seeder merupakan data demonstrasi lokal, bukan data production.
 - Docker belum dapat dijalankan pada mesin ini jika Docker CLI/Engine tidak tersedia; lihat hasil final audit yang menyertai perubahan.

@@ -42,6 +42,8 @@ class User extends Authenticatable
 
     public function assignedTasks(): BelongsToMany
     {
-        return $this->belongsToMany(Task::class)->withTimestamps();
+        return $this->belongsToMany(Task::class)
+            ->withPivot(['status', 'submission'])
+            ->withTimestamps();
     }
 }

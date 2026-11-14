@@ -17,6 +17,10 @@ class TaskManagementTest extends TestCase
         $this->getJson('/api/tasks')->assertUnauthorized();
         $this->withToken('invalid-token')->getJson('/api/tasks')->assertUnauthorized();
         $this->patchJson('/api/tasks/1/status', ['is_completed' => true])->assertUnauthorized();
+        $this->patchJson('/api/tasks/1/submission', [
+            'status' => 'completed',
+            'submission' => 'No access.',
+        ])->assertUnauthorized();
     }
 
     public function test_member_sees_only_tasks_they_created_or_are_assigned_to(): void
@@ -173,7 +177,7 @@ class TaskManagementTest extends TestCase
         $this->assertDatabaseMissing('tasks', ['title' => 'Valid title']);
     }
 
-    public function test_member_can_update_own_task_details_and_complete_an_assigned_task(): void
+    public function test_member_can_update_own_task_and_submit_assigned_task_work(): void
     {
         $member = User::factory()->create();
         $createdTask = Task::factory()->for($member, 'creator')->create();
@@ -185,19 +189,25 @@ class TaskManagementTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('data.task.title', 'Updated created task');
 
-        $this->authenticateAs($member)->patchJson("/api/tasks/{$assignedTask->id}/status", [
-            'is_completed' => true,
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$assignedTask->id}/submission", [
+            'status' => 'completed',
+            'submission' => 'Completed the requested report.',
         ])->assertOk()
-            ->assertJsonPath('data.task.is_completed', true);
+            ->assertJsonPath('data.task.is_completed', true)
+            ->assertJsonPath('data.task.my_assignment.status', 'completed')
+            ->assertJsonPath('data.task.my_assignment.submission', 'Completed the requested report.');
 
         $admin = User::factory()->admin()->create();
         $this->authenticateAs($admin)->getJson("/api/tasks/{$assignedTask->id}")
             ->assertOk()
             ->assertJsonPath('data.task.is_completed', true);
 
-        $this->authenticateAs($member)->patchJson("/api/tasks/{$assignedTask->id}/status", [
-            'is_completed' => false,
-        ])->assertForbidden();
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$assignedTask->id}/submission", [
+            'status' => 'in_progress',
+            'submission' => 'Still working.',
+        ])->assertOk()
+            ->assertJsonPath('data.task.my_assignment.status', 'in_progress')
+            ->assertJsonPath('data.task.is_completed', false);
 
         $this->assertDatabaseHas('tasks', [
             'id' => $createdTask->id,
@@ -205,7 +215,13 @@ class TaskManagementTest extends TestCase
         ]);
         $this->assertDatabaseHas('tasks', [
             'id' => $assignedTask->id,
-            'is_completed' => true,
+            'is_completed' => false,
+        ]);
+        $this->assertDatabaseHas('task_user', [
+            'task_id' => $assignedTask->id,
+            'user_id' => $member->id,
+            'status' => 'in_progress',
+            'submission' => 'Still working.',
         ]);
 
         $this->authenticateAs($member)->putJson("/api/tasks/{$assignedTask->id}", [
@@ -388,6 +404,114 @@ class TaskManagementTest extends TestCase
         $this->assertDatabaseHas('tasks', [
             'id' => $task->id,
             'is_completed' => false,
+        ]);
+    }
+
+    public function test_each_assignee_has_an_independent_status_and_admin_can_see_submissions(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $firstMember = User::factory()->create();
+        $secondMember = User::factory()->create();
+        $task = Task::factory()->for($admin, 'creator')->create();
+        $task->assignees()->attach([$firstMember->id, $secondMember->id]);
+
+        $this->authenticateAs($firstMember)->patchJson("/api/tasks/{$task->id}/submission", [
+            'status' => 'completed',
+            'submission' => 'First member result.',
+        ])->assertOk()
+            ->assertJsonPath('data.task.is_completed', false)
+            ->assertJsonPath('data.task.my_assignment.status', 'completed');
+
+        $this->authenticateAs($firstMember)->getJson('/api/tasks?status=completed')
+            ->assertOk()
+            ->assertJsonPath('data.pagination.total', 1);
+        $this->authenticateAs($secondMember)->getJson('/api/tasks?status=pending')
+            ->assertOk()
+            ->assertJsonPath('data.pagination.total', 1);
+
+        $this->assertDatabaseHas('task_user', [
+            'task_id' => $task->id,
+            'user_id' => $firstMember->id,
+            'status' => 'completed',
+            'submission' => 'First member result.',
+        ]);
+        $this->assertDatabaseHas('task_user', [
+            'task_id' => $task->id,
+            'user_id' => $secondMember->id,
+            'status' => 'in_progress',
+            'submission' => null,
+        ]);
+
+        $this->authenticateAs($secondMember)->getJson("/api/tasks/{$task->id}")
+            ->assertOk()
+            ->assertJsonPath('data.task.assignees.0.status', null)
+            ->assertJsonPath('data.task.assignees.0.submission', null);
+
+        $this->authenticateAs($admin)->getJson("/api/tasks/{$task->id}")
+            ->assertOk()
+            ->assertJsonFragment([
+                'id' => $firstMember->id,
+                'name' => $firstMember->name,
+                'status' => 'completed',
+                'submission' => 'First member result.',
+            ])
+            ->assertJsonFragment([
+                'id' => $secondMember->id,
+                'name' => $secondMember->name,
+                'status' => 'in_progress',
+                'submission' => null,
+            ]);
+
+        $this->authenticateAs($secondMember)->patchJson("/api/tasks/{$task->id}/submission", [
+            'status' => 'completed',
+            'submission' => 'Second member result.',
+        ])->assertOk()
+            ->assertJsonPath('data.task.is_completed', true);
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $task->id,
+            'is_completed' => true,
+        ]);
+    }
+
+    public function test_assignee_must_submit_a_result_before_marking_work_completed(): void
+    {
+        $member = User::factory()->create();
+        $task = Task::factory()->create();
+        $task->assignees()->attach($member);
+
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$task->id}/submission", [
+            'status' => 'completed',
+            'submission' => '',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('submission');
+
+        $this->assertDatabaseHas('task_user', [
+            'task_id' => $task->id,
+            'user_id' => $member->id,
+            'status' => 'in_progress',
+            'submission' => null,
+        ]);
+    }
+
+    public function test_admin_cannot_submit_work_as_a_member(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $task = Task::factory()->for($admin, 'creator')->create();
+        $member = User::factory()->create();
+        $task->assignees()->attach($member);
+
+        $this->authenticateAs($admin)->patchJson("/api/tasks/{$task->id}/submission", [
+            'status' => 'completed',
+            'submission' => 'Admin should not submit for member.',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('task_user', [
+            'task_id' => $task->id,
+            'user_id' => $member->id,
+            'status' => 'in_progress',
+            'submission' => null,
         ]);
     }
 

@@ -4,11 +4,12 @@ import { getErrorMessage } from '../api/errors'
 import { ConfirmDialog } from '../components/dashboard/ConfirmDialog'
 import { DashboardShell } from '../components/dashboard/DashboardShell'
 import { TaskStatusBadge } from '../components/dashboard/TaskStatusBadge'
+import { TaskSubmissionForm } from '../components/dashboard/TaskSubmissionForm'
 import { ErrorState } from '../components/feedback/ErrorState'
 import { LoadingState } from '../components/feedback/LoadingState'
 import { useAuth } from '../hooks/useAuth'
 import { taskService } from '../services/taskService'
-import type { Task } from '../types/api'
+import type { AssignmentStatus, Task } from '../types/api'
 
 function formatDate(value: string | null, includeTime = false): string {
   if (!value) {
@@ -36,9 +37,14 @@ export function TaskDetailPage() {
   const [task, setTask] = useState<Task | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [isDeleting, setIsDeleting] = useState(false)
+  const [isSubmittingWork, setIsSubmittingWork] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const canEditTask = user?.role === 'admin' || task?.created_by === user?.id
+  const canSubmitWork = user?.role === 'member'
+    && task?.created_by !== user?.id
+    && task?.my_assignment !== null
 
   const loadTask = useCallback(async () => {
     if (!taskId || !/^\d+$/.test(taskId)) {
@@ -87,6 +93,27 @@ export function TaskDetailPage() {
     }
   }
 
+  async function handleSubmitWork(status: AssignmentStatus, submission: string) {
+    if (!task) {
+      return
+    }
+
+    setIsSubmittingWork(true)
+    setError(null)
+    setSuccess(null)
+
+    try {
+      setTask(await taskService.submitWork(task.id, status, submission))
+      setSuccess(status === 'completed'
+        ? 'Status selesai dan hasil pekerjaan berhasil dikirim.'
+        : 'Progres dan hasil pekerjaan berhasil diperbarui.')
+    } catch (requestError: unknown) {
+      setError(getErrorMessage(requestError))
+    } finally {
+      setIsSubmittingWork(false)
+    }
+  }
+
   return (
     <DashboardShell active="tasks">
       <div className="mx-auto flex max-w-5xl flex-col gap-5">
@@ -98,6 +125,7 @@ export function TaskDetailPage() {
         </Link>
 
         {error && <ErrorState message={error} onRetry={() => void loadTask()} />}
+        {success && <p className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800" role="status">{success}</p>}
 
         {isLoading ? (
           <LoadingState message="Memuat detail tugas..." />
@@ -107,7 +135,11 @@ export function TaskDetailPage() {
               <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <TaskStatusBadge isCompleted={task.is_completed} />
+                    <TaskStatusBadge
+                      isCompleted={task.my_assignment
+                        ? task.my_assignment.status === 'completed'
+                        : task.is_completed}
+                    />
                     <span className="text-xs text-slate-400">Tugas #{task.id}</span>
                   </div>
                   <h1 className="mt-4 break-words text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">
@@ -159,6 +191,23 @@ export function TaskDetailPage() {
               </div>
             </section>
 
+            {canSubmitWork && task.my_assignment && (
+              <section className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm shadow-slate-900/[0.02] sm:p-6">
+                <div className="mb-5">
+                  <h2 className="font-semibold text-slate-900">Progres dan hasil pekerjaan</h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Perubahan ini hanya berlaku untuk penugasan Anda. Admin dapat melihat status dan hasil yang dikirim.
+                  </p>
+                </div>
+                <TaskSubmissionForm
+                  initialStatus={task.my_assignment.status}
+                  initialSubmission={task.my_assignment.submission}
+                  isSaving={isSubmittingWork}
+                  onSubmit={handleSubmitWork}
+                />
+              </section>
+            )}
+
             <div className="grid gap-5 lg:grid-cols-2">
               <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm shadow-slate-900/[0.02] sm:p-6">
                 <div className="flex items-start justify-between gap-3">
@@ -186,7 +235,17 @@ export function TaskDetailPage() {
                         <span className="flex size-9 items-center justify-center rounded-full bg-slate-100 text-sm font-semibold text-slate-700">
                           {assignee.name.trim().charAt(0).toUpperCase()}
                         </span>
-                        <span className="text-sm font-medium text-slate-800">{assignee.name}</span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="text-sm font-medium text-slate-800">{assignee.name}</span>
+                            {assignee.status && <TaskStatusBadge isCompleted={assignee.status === 'completed'} />}
+                          </div>
+                          {assignee.submission && (
+                            <p className="mt-1 whitespace-pre-wrap break-words text-sm text-slate-600">
+                              Hasil: {assignee.submission}
+                            </p>
+                          )}
+                        </div>
                       </li>
                     ))}
                   </ul>

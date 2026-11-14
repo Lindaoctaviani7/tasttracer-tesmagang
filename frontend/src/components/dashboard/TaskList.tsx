@@ -1,6 +1,6 @@
 import { useState, type FocusEvent } from 'react'
 import { Link } from 'react-router-dom'
-import type { Task } from '../../types/api'
+import type { AssignmentStatus, Task } from '../../types/api'
 import { TaskStatusBadge } from './TaskStatusBadge'
 
 interface TaskListProps {
@@ -9,6 +9,7 @@ interface TaskListProps {
   isAdmin: boolean
   isUpdatingTaskId: number | null
   onUpdateStatus: (task: Task, isCompleted: boolean) => void
+  onSelectAssignmentStatus: (task: Task, status: AssignmentStatus) => void
   onDelete: (task: Task) => void
 }
 
@@ -62,17 +63,25 @@ function TaskStatusControl({
   isAdmin,
   isUpdating,
   onUpdateStatus,
+  onSelectAssignmentStatus,
 }: {
   task: Task
   currentUserId: number
   isAdmin: boolean
   isUpdating: boolean
   onUpdateStatus: (isCompleted: boolean) => void
+  onSelectAssignmentStatus: (status: AssignmentStatus) => void
 }) {
   const [isOpen, setIsOpen] = useState(false)
+  const isAssignedMember = !isAdmin
+    && task.created_by !== currentUserId
+    && task.my_assignment !== null
   const canManageStatus = isAdmin || task.created_by === currentUserId
-  const canChangeStatus = canManageStatus || !task.is_completed
-  const availableStatuses = canManageStatus ? [false, true] : [true]
+  const currentStatus = isAssignedMember
+    ? task.my_assignment?.status === 'completed'
+    : task.is_completed
+  const canChangeStatus = canManageStatus || isAssignedMember
+  const availableStatuses = [false, true]
 
   function closeOnBlur(event: FocusEvent<HTMLDivElement>) {
     if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
@@ -93,13 +102,13 @@ function TaskStatusControl({
       <button
         aria-expanded={isOpen}
         aria-haspopup="menu"
-        aria-label={`Ubah status tugas ${task.title}, saat ini ${task.is_completed ? 'Selesai' : 'Berjalan'}`}
+        aria-label={`Ubah status tugas ${task.title}, saat ini ${currentStatus ? 'Selesai' : 'Berjalan'}`}
         className="inline-flex items-center gap-1 rounded-full text-left outline-none transition focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
         disabled={isUpdating || !canChangeStatus}
         onClick={() => setIsOpen((open) => !open)}
         type="button"
       >
-        <TaskStatusBadge isCompleted={task.is_completed} />
+        <TaskStatusBadge isCompleted={currentStatus} />
         {canChangeStatus && (
           <svg aria-hidden="true" className="size-3 text-slate-400" fill="none" viewBox="0 0 16 16">
             <path d="m4 6 4 4 4-4" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" />
@@ -117,13 +126,17 @@ function TaskStatusControl({
 
             return (
               <button
-                aria-checked={task.is_completed === isCompleted}
+                aria-checked={currentStatus === isCompleted}
                 className="flex min-h-9 w-full items-center rounded-lg px-3 text-left text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-default disabled:text-slate-400"
-                disabled={isUpdating || task.is_completed === isCompleted}
+                disabled={isUpdating || currentStatus === isCompleted}
                 key={label}
                 onClick={() => {
                   setIsOpen(false)
-                  onUpdateStatus(isCompleted)
+                  if (isAssignedMember) {
+                    onSelectAssignmentStatus(isCompleted ? 'completed' : 'in_progress')
+                  } else {
+                    onUpdateStatus(isCompleted)
+                  }
                 }}
                 role="menuitemradio"
                 type="button"
@@ -144,9 +157,37 @@ export function TaskList({
   isAdmin,
   isUpdatingTaskId,
   onUpdateStatus,
+  onSelectAssignmentStatus,
   onDelete,
 }: TaskListProps) {
   const canEditTask = (task: Task) => isAdmin || task.created_by === currentUserId
+  const hasAssignees = (task: Task) => task.assignees.length > 0
+
+  function renderStatus(task: Task) {
+    if (isAdmin && hasAssignees(task)) {
+      const completedAssignees = task.assignees.filter((assignee) => assignee.status === 'completed').length
+
+      return (
+        <div className="flex flex-col gap-1">
+          <TaskStatusBadge isCompleted={task.is_completed} />
+          <span className="text-xs text-slate-500">
+            {completedAssignees}/{task.assignees.length} member selesai
+          </span>
+        </div>
+      )
+    }
+
+    return (
+      <TaskStatusControl
+        currentUserId={currentUserId}
+        isAdmin={isAdmin}
+        isUpdating={isUpdatingTaskId === task.id}
+        onSelectAssignmentStatus={(status) => onSelectAssignmentStatus(task, status)}
+        onUpdateStatus={(isCompleted) => onUpdateStatus(task, isCompleted)}
+        task={task}
+      />
+    )
+  }
 
   return (
     <>
@@ -187,13 +228,7 @@ export function TaskList({
                     )}
                   </td>
                   <td className="px-4 py-4">
-                    <TaskStatusControl
-                      currentUserId={currentUserId}
-                      isAdmin={isAdmin}
-                      isUpdating={isUpdatingTaskId === task.id}
-                      onUpdateStatus={(isCompleted) => onUpdateStatus(task, isCompleted)}
-                      task={task}
-                    />
+                    {renderStatus(task)}
                   </td>
                   <td className="px-4 py-4 text-sm text-slate-600">{task.creator.name}</td>
                   <td className="px-4 py-4">
@@ -251,13 +286,7 @@ export function TaskList({
               )}
             </div>
             <div className="mt-4 flex flex-wrap items-center gap-2">
-              <TaskStatusControl
-                currentUserId={currentUserId}
-                isAdmin={isAdmin}
-                isUpdating={isUpdatingTaskId === task.id}
-                onUpdateStatus={(isCompleted) => onUpdateStatus(task, isCompleted)}
-                task={task}
-              />
+              {renderStatus(task)}
               {task.tags.slice(0, 2).map((tag) => (
                 <span className="rounded-md bg-indigo-50 px-2 py-1 text-[0.68rem] font-medium text-indigo-700" key={tag.id}>
                   {tag.name}

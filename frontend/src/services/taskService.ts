@@ -5,6 +5,7 @@ import type {
   Tag,
   Task,
   User,
+  AssignmentStatus,
 } from '../types/api'
 
 export interface TaskFilters {
@@ -60,6 +61,15 @@ export const taskService = {
     const response = await apiClient.patch<ApiResponse<{ task: Task }>>(`/tasks/${taskId}/status`, {
       is_completed: isCompleted,
     })
+
+    return response.data.data.task
+  },
+
+  async submitWork(taskId: number, status: AssignmentStatus, submission: string): Promise<Task> {
+    const response = await apiClient.patch<ApiResponse<{ task: Task }>>(
+      `/tasks/${taskId}/submission`,
+      { status, submission: submission || null },
+    )
 
     return response.data.data.task
   },
