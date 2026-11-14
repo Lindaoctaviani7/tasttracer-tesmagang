@@ -1,5 +1,11 @@
 import { apiClient } from '../api/client'
-import type { ApiResponse, PaginatedCollection, User, UserRole } from '../types/api'
+import type {
+  ApiResponse,
+  AssigneeOption,
+  PaginatedCollection,
+  User,
+  UserRole,
+} from '../types/api'
 
 export interface UserFilters {
   search?: string
@@ -11,7 +17,26 @@ interface UserCollection extends PaginatedCollection {
   users: User[]
 }
 
+export interface AssigneeOptionFilters {
+  search?: string
+  page?: number
+  per_page?: number
+}
+
+interface AssigneeOptionCollection extends PaginatedCollection {
+  users: AssigneeOption[]
+}
+
 export const userService = {
+  async listAssigneeOptions(filters: AssigneeOptionFilters = {}): Promise<AssigneeOptionCollection> {
+    const response = await apiClient.get<ApiResponse<AssigneeOptionCollection>>(
+      '/users/assignee-options',
+      { params: filters },
+    )
+
+    return response.data.data
+  },
+
   async list(filters: UserFilters = {}): Promise<UserCollection> {
     const response = await apiClient.get<ApiResponse<UserCollection>>('/admin/users', {
       params: filters,

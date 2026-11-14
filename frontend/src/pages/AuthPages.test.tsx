@@ -30,6 +30,16 @@ function response(
   }
 }
 
+function taskCollection(config: Parameters<AxiosAdapter>[0]) {
+  return response(config, {
+    message: 'Tasks retrieved successfully.',
+    data: {
+      tasks: [],
+      pagination: { current_page: 1, per_page: 10, total: 0, last_page: 1 },
+    },
+  })
+}
+
 function authSession(message: string) {
   return {
     message,
@@ -156,9 +166,11 @@ describe('authentication pages', () => {
 
   it('stores the access token but not the password after login and redirects to dashboard', async () => {
     let finishLogin: (() => void) | undefined
-    const adapter: AxiosAdapter = (config) => new Promise((resolve) => {
-      finishLogin = () => resolve(response(config, authSession('Login successful.')))
-    })
+    const adapter: AxiosAdapter = (config) => config.url?.endsWith('/tasks')
+      ? Promise.resolve(taskCollection(config))
+      : new Promise((resolve) => {
+        finishLogin = () => resolve(response(config, authSession('Login successful.')))
+      })
     apiClient.defaults.adapter = adapter
     window.history.replaceState({}, '', '/login')
     render(<App />)
@@ -170,7 +182,7 @@ describe('authentication pages', () => {
     expect(screen.getByRole('button', { name: 'Memeriksa akun...' }).hasAttribute('disabled')).toBe(true)
     finishLogin?.()
 
-    expect(await screen.findByRole('heading', { name: 'Halo, Rina Putri' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Ringkasan kerja' })).toBeTruthy()
     expect(window.localStorage.getItem('task-management.access-token')).toBe(token)
     expect(Array.from({ length: window.localStorage.length }, (_, index) => window.localStorage.getItem(window.localStorage.key(index) ?? '')))
       .not.toContain('SecurePass1!')
@@ -186,16 +198,18 @@ describe('authentication pages', () => {
   })
 
   it('redirects an authenticated visitor from login to dashboard after restoring their session', async () => {
-    const adapter: AxiosAdapter = async (config) => response(config, {
-      message: 'Authenticated user retrieved successfully.',
-      data: { user },
-    })
+    const adapter: AxiosAdapter = async (config) => config.url?.endsWith('/tasks')
+      ? taskCollection(config)
+      : response(config, {
+        message: 'Authenticated user retrieved successfully.',
+        data: { user },
+      })
     apiClient.defaults.adapter = adapter
     saveAccessToken(token)
     window.history.replaceState({}, '', '/login')
     render(<App />)
 
-    expect(await screen.findByRole('heading', { name: 'Halo, Rina Putri' })).toBeTruthy()
+    expect(await screen.findByRole('heading', { name: 'Ringkasan kerja' })).toBeTruthy()
     await waitFor(() => expect(window.location.pathname).toBe('/dashboard'))
   })
 })

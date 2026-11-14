@@ -14,6 +14,21 @@ export const tagService = {
     return response.data.data
   },
 
+  async listAll(): Promise<Tag[]> {
+    const firstPage = await this.list()
+    const remainingPages = await Promise.all(
+      Array.from(
+        { length: Math.max(firstPage.pagination.last_page - 1, 0) },
+        (_, index) => this.list(index + 2),
+      ),
+    )
+
+    return [
+      ...firstPage.tags,
+      ...remainingPages.flatMap((page) => page.tags),
+    ]
+  },
+
   async create(name: string): Promise<Tag> {
     const response = await apiClient.post<ApiResponse<{ tag: Tag }>>('/tags', { name })
 

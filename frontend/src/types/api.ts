@@ -24,6 +24,12 @@ export interface User {
   created_at: string | null
 }
 
+export interface AssigneeOption {
+  id: number
+  name: string
+  email: string
+}
+
 export interface Tag {
   id: number
   name: string

@@ -1,9 +1,10 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom'
 import { LoadingState } from '../components/feedback/LoadingState'
 import { useAuth } from '../hooks/useAuth'
-import { AccountPage } from '../pages/AccountPage'
 import { LoginPage } from '../pages/LoginPage'
 import { RegisterPage } from '../pages/RegisterPage'
+import { TaskDetailPage } from '../pages/TaskDetailPage'
+import { TaskManagementPage } from '../pages/TaskManagementPage'
 
 function ProtectedRoute() {
   const { isLoading, user } = useAuth()
@@ -45,7 +46,11 @@ export function AppRoutes() {
           <Route path="/register" element={<RegisterPage />} />
         </Route>
         <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<AccountPage />} />
+          <Route path="/dashboard" element={<TaskManagementPage page="dashboard" />} />
+          <Route path="/tasks" element={<TaskManagementPage page="tasks" />} />
+          <Route path="/tasks/new" element={<TaskManagementPage page="tasks" />} />
+          <Route path="/tasks/:taskId/edit" element={<TaskManagementPage page="tasks" />} />
+          <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
           <Route path="/account" element={<Navigate to="/dashboard" replace />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />

@@ -17,6 +17,7 @@ export interface TaskFilters {
 export interface CreateTaskData {
   title: string
   description?: string | null
+  is_completed?: boolean
 }
 
 export interface UpdateTaskData {
@@ -70,6 +71,15 @@ export const taskService = {
 
   async addAssignees(taskId: number, userIds: number[]): Promise<User[]> {
     const response = await apiClient.post<ApiResponse<{ assignees: User[] }>>(
+      `/tasks/${taskId}/assignees`,
+      { user_ids: userIds },
+    )
+
+    return response.data.data.assignees
+  },
+
+  async syncAssignees(taskId: number, userIds: number[]): Promise<Task['assignees']> {
+    const response = await apiClient.put<ApiResponse<{ assignees: Task['assignees'] }>>(
       `/tasks/${taskId}/assignees`,
       { user_ids: userIds },
     )

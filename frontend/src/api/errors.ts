@@ -27,6 +27,8 @@ export function toApiError(error: unknown): ApiError {
     const response = error.response
     const message = response === undefined
       ? 'Tidak dapat terhubung ke server API.'
+      : response.status === 403
+        ? 'Anda tidak memiliki izin untuk melakukan tindakan ini.'
       : response.status >= 500
         ? 'Server API mengalami gangguan. Silakan coba lagi nanti.'
         : response.data?.message ?? 'Permintaan tidak dapat diproses.'
