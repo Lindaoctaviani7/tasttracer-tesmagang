@@ -1,36 +1,99 @@
 # Task Management
 
-Internal task management project with a Laravel API, a React/TypeScript frontend, PostgreSQL, and Docker Compose.
+Aplikasi internal untuk mengelola tugas tim dengan backend Laravel REST API dan frontend React TypeScript. Autentikasi menggunakan Laravel Sanctum bearer token dan database menggunakan SQLite.
 
-## Requirements
+## Fitur
 
-- PHP 8.3 or later and Composer
-- PHP `pdo_pgsql` extension for local PostgreSQL connections
-- Node.js 22 or later and npm
-- PostgreSQL 17 for local development, or Docker Desktop with Docker Compose
+- Registrasi member, login, logout, dan profil pengguna terautentikasi.
+- CRUD tugas, pencarian, filter status, pagination, serta pengelolaan assignee dan tag.
+- Hak akses tugas berdasarkan role dan kepemilikan/penugasan.
+- Fitur admin: ringkasan statistik, manajemen seluruh tugas, pencarian dan filter pengguna, detail pengguna, serta perubahan role.
+- Seeder berisi akun demo dan data tugas lokal.
 
-## Local development
+## Teknologi
 
-From the project root in PowerShell, create local environment files:
+- PHP 8.3+ dan Laravel 13
+- Laravel Sanctum 4
+- SQLite
+- React 19, TypeScript, Vite 8, React Router, Axios
+- Tailwind CSS 4
+- Docker Compose v2 untuk lingkungan development
+
+## Arsitektur
+
+```text
+Browser
+  └── React + Vite (:5173)
+        └── /api melalui Vite proxy
+              └── Laravel REST API (:8000)
+                    ├── Sanctum authentication
+                    ├── Form Requests, Policies, Resources
+                    └── SQLite (file pada Docker named volume)
+```
+
+Vite development server dan `php artisan serve` melayani frontend dan API; reverse proxy tambahan tidak diperlukan untuk development. SQLite adalah file database, bukan service jaringan, sehingga Compose tidak menjalankan PostgreSQL. Healthcheck Compose memeriksa kesiapan API setelah migrasi berhasil.
+
+## Struktur folder
+
+```text
+backend/
+  app/                 Controllers, Requests, Resources, Models, Policies
+  database/            Migrations, factories, seeders, SQLite lokal
+  routes/api.php       REST API
+  tests/               PHPUnit feature tests
+  Dockerfile
+frontend/
+  src/api/             Axios client dan token storage
+  src/components/      Komponen UI
+  src/contexts/        Authentication state
+  src/hooks/
+  src/pages/
+  src/routes/
+  src/services/        API services
+  src/types/
+  Dockerfile
+docker-compose.yml
+```
+
+## Persyaratan
+
+Untuk development tanpa Docker:
+
+- PHP 8.3 atau lebih baru dengan ekstensi `pdo_sqlite`
+- Composer 2
+- Node.js 22 atau lebih baru dan npm
+
+Untuk Docker:
+
+- Docker Desktop atau Docker Engine
+- Docker Compose v2
+
+## Instalasi backend (lokal)
+
+Dari root repository di PowerShell, salin contoh konfigurasi sekali saja agar file lokal yang sudah ada tidak tertimpa:
 
 ```powershell
 if (-not (Test-Path backend\.env)) { Copy-Item backend\.env.example backend\.env }
 if (-not (Test-Path frontend\.env)) { Copy-Item frontend\.env.example frontend\.env }
 ```
 
-Ensure PostgreSQL is running and `backend\.env` has the correct connection settings.
-
-Start the backend:
+Lalu jalankan backend:
 
 ```powershell
 Set-Location backend
 composer install
 php artisan key:generate
+if (-not (Test-Path database\database.sqlite)) { New-Item -ItemType File database\database.sqlite }
 php artisan migrate
+php artisan db:seed
 php artisan serve
 ```
 
-In another terminal, start the frontend:
+API tersedia di `http://localhost:8000`. Jangan menjalankan `migrate:fresh` pada database yang berisi data yang ingin dipertahankan.
+
+## Instalasi frontend (lokal)
+
+Di terminal lain:
 
 ```powershell
 Set-Location frontend
@@ -38,87 +101,137 @@ npm ci
 npm run dev
 ```
 
-The frontend is served at `http://localhost:5173`; the API is served at `http://localhost:8000`.
+Frontend tersedia di `http://localhost:5173`. `VITE_API_URL=/api` menggunakan Vite proxy; `API_PROXY_TARGET` pada `frontend/.env` secara default menunjuk ke backend lokal di port 8000. Ubah nilai tersebut hanya jika backend berjalan pada alamat berbeda.
 
-## Database schema
+## Konfigurasi SQLite
 
-The backend migrations create users with `admin`/`member` roles, tasks, tags, and the `task_user` and `task_tag` assignment pivots. Eloquent relationships are available through `User::createdTasks()`, `User::assignedTasks()`, `Task::creator()`, `Task::assignees()`, `Task::tags()`, and `Tag::tasks()`.
+`backend/.env.example` menggunakan:
 
-Create the schema and optional local sample data from `backend`:
+```dotenv
+DB_CONNECTION=sqlite
+DB_DATABASE=database/database.sqlite
+```
+
+File database lokal berada di `backend/database/database.sqlite` dan tidak dilacak Git. Buat file tersebut jika belum ada, kemudian jalankan:
 
 ```powershell
+Set-Location backend
 php artisan migrate
 php artisan db:seed
+php artisan migrate:status
 ```
 
-The seeder creates a small, repeatable task graph for local development.
+Seeder demo hanya boleh dijalankan pada environment `local` atau `testing`; perintah pada environment lain akan berhenti dengan error. Seeder idempotent untuk akun dan data contoh.
 
-## Docker development
+## Menjalankan dengan Docker Compose
 
-Create the same two environment files if they do not exist, then start the services:
+Pastikan `backend/.env` sudah dibuat dari contoh. Buat application key di image/container (perubahan `.env` tersimpan pada folder backend yang di-mount):
 
 ```powershell
-docker compose up --build
+docker compose build
+docker compose run --rm --no-deps --entrypoint php backend artisan key:generate --force
+docker compose up
 ```
 
-In another terminal, initialize the Laravel key and database:
+Entrypoint backend membuat file SQLite pada named volume dan menjalankan `php artisan migrate --force` sebelum Laravel menerima request. Frontend meneruskan `/api` ke service backend. Compose memeriksa `/api/health` dan menunggu backend sehat sebelum menjalankan frontend.
+
+Untuk memasukkan data demo:
 
 ```powershell
-docker compose exec backend php artisan key:generate
-docker compose exec backend php artisan migrate
+docker compose exec backend php artisan db:seed
 ```
 
-Docker Compose starts PostgreSQL, the Laravel API, and the Vite development server. The API container connects to the `postgres` service; local backend development uses `127.0.0.1`.
-
-## API foundation
-
-- `GET /api/health` returns `{"status":"ok"}`.
-- CORS allows the origin configured by `FRONTEND_URL` in `backend/.env`.
-- `VITE_API_BASE_URL` in `frontend/.env` is the frontend API base URL.
-
-## Authentication
-
-The API uses Laravel Sanctum personal access tokens. Registration and login return a bearer token and its expiration timestamp; send the token on protected requests as `Authorization: Bearer <token>`. Tokens expire after 60 minutes by default; change `SANCTUM_EXPIRATION` in `backend/.env` to adjust the lifetime.
-
-- `POST /api/register` accepts `name`, `email`, `password`, and `password_confirmation`. Passwords must be at least eight characters with uppercase, lowercase, numeric, and symbol characters. Public registration always creates a `member`; a supplied `role` is rejected.
-- `POST /api/login` accepts `email` and `password`. Attempts are limited to five per minute per email/IP pair.
-- `GET /api/user` returns the authenticated user's public profile.
-- `POST /api/logout` revokes the current bearer token only.
-- Run `php artisan migrate` from `backend` to create the Sanctum token table.
-
-Successful responses use `{ "message": "...", "data": { ... } }`. Validation and invalid-credential errors return HTTP 422; protected endpoints require a valid bearer token and otherwise return HTTP 401.
-
-## Task and user access
-
-All task endpoints require a Sanctum bearer token. Admins can access every task; members can access only tasks they created or are assigned to. Task responses never accept `created_by` from the client; new tasks are owned by the authenticated user.
-
-- `GET /api/tasks` lists all tasks for admins and the member's created/assigned tasks. It accepts `status=completed|pending`, `search=keyword` (title search), `page` (minimum 1), and `per_page` (1–100, default 10); filtering is applied before pagination.
-- `POST /api/tasks` creates a task for the authenticated user. It accepts `title` (required, maximum 100 characters), optional `description`, and optional boolean `is_completed` (defaults to `false`).
-- `GET /api/tasks/{task}`, `PUT /api/tasks/{task}`, and `DELETE /api/tasks/{task}` show, replace, and delete tasks subject to the same access policy. `PUT` requires a non-empty `title` up to 100 characters and accepts optional `description` and `is_completed`; `PATCH` remains available for partial updates.
-- `PUT /api/tasks/{task}/assignees` replaces the assignee list using `{ "user_ids": [1, 2] }`. Use an empty array to remove all assignees. Admins can manage assignees on any task; members need access to the task.
-- `GET /api/tasks/{task}/assignees` returns assignee profiles; `POST /api/tasks/{task}/assignees` adds one or more users using `{ "user_ids": [1, 2] }` without removing existing assignees; `DELETE /api/tasks/{task}/assignees/{userId}` removes one assignee. Re-adding an existing assignee does not create a duplicate. These endpoints use the same task access policy.
-- Authenticated users can list tags with `GET /api/tags`. Master-data changes are admin-only: `POST /api/tags` with `{ "name": "planning" }`, `PUT /api/tags/{tag}` with a unique `name`, and `DELETE /api/tags/{tag}`. Deleting a tag also removes its task associations, not the tasks.
-- Admins can attach tags to any task; members can attach or remove tags only on tasks they created or are assigned to. `POST /api/tasks/{task}/tags` accepts `{ "tag_ids": [1, 2] }` and adds tags without replacing existing associations; `DELETE /api/tasks/{task}/tags/{tagId}` removes one association. Duplicate IDs in a request are rejected, and re-adding an existing association is idempotent.
-
-User management requires the `admin` role:
-
-- `GET /api/users` and `GET /api/users/{user}` list and show users.
-- `PATCH /api/users/{user}` updates `name`, `email`, and/or `role` (`admin` or `member`).
-- `DELETE /api/users/{user}` deletes a user. Per the database foreign keys, this also deletes tasks created by that user.
-
-The role middleware protects user-management routes, while `TaskPolicy` authorizes task actions. Authenticated requests without access receive HTTP 403; invalid input receives HTTP 422; unknown records receive HTTP 404.
-
-## Tests
-
-Run backend tests from `backend`:
+Untuk melihat status dan menghentikan layanan:
 
 ```powershell
+docker compose ps
+docker compose down
+```
+
+Data SQLite tetap ada setelah `docker compose down`, karena disimpan dalam named volume `sqlite_data`. **Jangan gunakan `docker compose down --volumes` kecuali memang ingin menghapus database dan seluruh data volume development.**
+
+Konfigurasi development ini tidak menjalankan PostgreSQL: keputusan proyek menggunakan SQLite. Karena SQLite tidak memiliki server database untuk diperiksa dengan `pg_isready`, readiness diperiksa melalui healthcheck API; startup API sendiri menjalankan migrasi sebelum menerima traffic.
+
+## Akun demo
+
+Jalankan seeder pada environment lokal:
+
+| Role | Email | Password development |
+|---|---|---|
+| Admin | `admin@example.com` | `Taskflow-Local-2026!` |
+| Member | `member@example.com` | `Taskflow-Local-2026!` |
+
+Password tersebut hanya untuk development dan berasal dari seeder lokal. Jangan gunakan pada production. Registrasi publik selalu membuat role `member`; perubahan role tersedia hanya melalui administrasi admin.
+
+## Role dan hak akses
+
+- **Admin:** dapat melihat dan mengelola semua tugas, assignee, tag master, pengguna dan role, serta statistik keseluruhan.
+- **Member:** hanya dapat melihat/mengelola tugas yang dibuat sendiri atau ditugaskan kepadanya; dapat mengelola relasi assignee/tag tugas yang dapat dikelola, dan tidak dapat mengakses administrasi.
+- Endpoint admin dilindungi middleware backend. Menyembunyikan navigasi frontend bukan satu-satunya lapisan otorisasi.
+- Endpoint registrasi dan login bersifat publik. `GET /api/health` bersifat publik untuk healthcheck. Endpoint bisnis lainnya memerlukan Sanctum bearer token.
+
+## Endpoint API
+
+Semua endpoint diawali `/api`. Endpoint terproteksi memerlukan header `Authorization: Bearer <token>`. Response sukses menggunakan bentuk `{ "message": "...", "data": ... }`.
+
+| Method | Path | Akses | Kegunaan |
+|---|---|---|---|
+| GET | `/health` | Publik | Healthcheck API |
+| POST | `/register` | Publik | Registrasi sebagai member |
+| POST | `/login` | Publik | Login; dibatasi rate limit |
+| GET | `/user` | Terautentikasi | Profil pengguna aktif |
+| POST | `/logout` | Terautentikasi | Mencabut token aktif |
+| GET | `/tasks` | Terautentikasi | Daftar tugas; menerima `status`, `search`, `page`, `per_page` |
+| POST | `/tasks` | Terautentikasi | Membuat tugas dengan `created_by` dari token |
+| GET | `/tasks/{task}` | Terautentikasi + policy | Detail tugas |
+| PUT, PATCH | `/tasks/{task}` | Terautentikasi + policy | Memperbarui tugas |
+| DELETE | `/tasks/{task}` | Terautentikasi + policy | Menghapus tugas |
+| GET | `/tasks/{task}/assignees` | Terautentikasi + policy | Daftar assignee |
+| POST | `/tasks/{task}/assignees` | Terautentikasi + policy | Menambahkan assignee |
+| PUT | `/tasks/{task}/assignees` | Terautentikasi + policy | Mengganti daftar assignee |
+| DELETE | `/tasks/{task}/assignees/{userId}` | Terautentikasi + policy | Menghapus satu assignee |
+| GET | `/users/assignee-options` | Terautentikasi | Pilihan assignee, pencarian dan pagination |
+| GET | `/tags` | Terautentikasi | Daftar tag |
+| POST | `/tags` | Admin | Membuat tag |
+| PUT | `/tags/{tag}` | Admin | Mengubah tag |
+| DELETE | `/tags/{tag}` | Admin | Menghapus tag |
+| POST | `/tasks/{task}/tags` | Terautentikasi + policy | Menambahkan tag ke tugas |
+| DELETE | `/tasks/{task}/tags/{tagId}` | Terautentikasi + policy | Menghapus relasi tag |
+| GET | `/admin/dashboard/stats` | Admin | Statistik pengguna dan tugas |
+| GET | `/admin/users` | Admin | Daftar, pencarian, filter `role`, pagination |
+| GET | `/admin/users/{user}` | Admin | Detail pengguna |
+| PATCH | `/admin/users/{user}/role` | Admin | Mengubah role; tidak boleh mengubah diri sendiri atau menurunkan admin terakhir |
+| GET | `/users` | Admin | Daftar pengguna |
+| GET | `/users/{user}` | Admin | Detail pengguna |
+| PUT, PATCH | `/users/{user}` | Admin | Memperbarui pengguna sesuai validasi |
+| DELETE | `/users/{user}` | Admin | Menghapus pengguna; admin terakhir dilindungi |
+
+Validation error mengembalikan HTTP 422, akses tanpa autentikasi 401, akses terlarang 403, record tidak ditemukan 404, dan konflik aturan admin terakhir 409.
+
+## Automated testing
+
+Jalankan seluruh PHPUnit feature tests dari `backend`:
+
+```powershell
+Set-Location backend
 php artisan test
 ```
 
-Build and lint the frontend from `frontend`:
+Jalankan test frontend, lint, dan production build dari `frontend`:
 
 ```powershell
-npm run build
+Set-Location frontend
+npm test
 npm run lint
+npm run build
 ```
+
+Suite backend menggunakan SQLite in-memory agar tidak mengubah database lokal. Frontend memakai Vitest dan Testing Library.
+
+## Asumsi dan keputusan implementasi
+
+- SQLite dipilih menggantikan PostgreSQL untuk development lokal dan Docker; PostgreSQL bukan bagian dari Compose.
+- Dockerfile dan Compose ditujukan untuk development. Backend menggunakan `php artisan serve`, frontend menggunakan Vite dev server; deployment production memerlukan server/proxy dan konfigurasi runtime tersendiri.
+- Token Sanctum dikirim sebagai bearer token oleh frontend. Password tidak disimpan di browser.
+- Seeder merupakan data demonstrasi lokal, bukan data production.
+- Docker belum dapat dijalankan pada mesin ini jika Docker CLI/Engine tidak tersedia; lihat hasil final audit yang menyertai perubahan.

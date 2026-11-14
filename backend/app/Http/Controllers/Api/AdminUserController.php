@@ -16,7 +16,11 @@ class AdminUserController extends Controller
     public function index(AdminUserIndexRequest $request): JsonResponse
     {
         $search = $request->validated('search');
+        $role = $request->validated('role');
         $users = User::query()
+            ->when($role, function ($query, string $role): void {
+                $query->where('role', $role);
+            })
             ->when($search, function ($query, string $search): void {
                 $query->where(function ($query) use ($search): void {
                     $query->where('name', 'like', "%{$search}%")

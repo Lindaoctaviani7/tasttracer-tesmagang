@@ -1,6 +1,11 @@
 .env
+.env.*
+!.env.example
 .git
+.gitignore
 node_modules
 public/build
+public/hot
 storage/logs
 vendor
+database/*.sqlite

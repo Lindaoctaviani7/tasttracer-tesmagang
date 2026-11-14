@@ -5,42 +5,53 @@ services:
     env_file:
       - ./backend/.env
     environment:
-      DB_HOST: postgres
+      APP_URL: http://localhost:8000
+      FRONTEND_URL: http://localhost:5173
+      DB_CONNECTION: sqlite
+      DB_DATABASE: /var/lib/sqlite/task-management.sqlite
     ports:
       - "8000:8000"
     volumes:
       - ./backend:/var/www/html
       - backend_vendor:/var/www/html/vendor
-    depends_on:
-      postgres:
-        condition: service_healthy
+      - sqlite_data:/var/lib/sqlite
+    healthcheck:
+      test:
+        - CMD
+        - php
+        - -r
+        - '$$response = @file_get_contents("http://127.0.0.1:8000/api/health"); exit($$response === false ? 1 : 0);'
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
 
   frontend:
     build:
       context: ./frontend
-    env_file:
-      - ./frontend/.env
+    environment:
+      VITE_API_URL: /api
+      API_PROXY_TARGET: http://backend:8000
     ports:
       - "5173:5173"
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
-
-  postgres:
-    image: postgres:17-alpine
-    env_file:
-      - ./backend/.env
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+    depends_on:
+      backend:
+        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:5173').then(response => process.exit(response.ok ? 0 : 1)).catch(() => process.exit(1))"
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 5
+      start_period: 20s
 
 volumes:
   backend_vendor:
   frontend_node_modules:
-  postgres_data:
+  sqlite_data:

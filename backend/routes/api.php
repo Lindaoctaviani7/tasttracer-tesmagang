@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\Api\AdminDashboardController;
 use App\Http\Controllers\Api\AdminUserController;
+use App\Http\Controllers\Api\AssigneeOptionsController;
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\TagController;
 use App\Http\Controllers\Api\TaskController;
@@ -15,6 +17,7 @@ Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:lo
 Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/user', [AuthController::class, 'user']);
+    Route::get('/users/assignee-options', AssigneeOptionsController::class);
 
     Route::apiResource('tasks', TaskController::class);
     Route::get('/tasks/{task}/assignees', [TaskController::class, 'indexAssignees']);
@@ -26,6 +29,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/tags', [TagController::class, 'index']);
 
     Route::middleware('role:admin')->group(function (): void {
+        Route::get('/admin/dashboard/stats', AdminDashboardController::class);
         Route::get('/admin/users', [AdminUserController::class, 'index']);
         Route::get('/admin/users/{user}', [AdminUserController::class, 'show']);
         Route::patch('/admin/users/{user}/role', [AdminUserController::class, 'updateRole']);

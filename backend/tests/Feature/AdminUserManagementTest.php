@@ -76,6 +76,28 @@ class AdminUserManagementTest extends TestCase
             ->assertJsonValidationErrors('search');
     }
 
+    public function test_admin_can_filter_users_by_role(): void
+    {
+        $admin = User::factory()->admin()->create();
+        $member = User::factory()->create();
+        Sanctum::actingAs($admin);
+
+        $this->getJson('/api/admin/users?role=member')
+            ->assertOk()
+            ->assertJsonPath('data.pagination.total', 1)
+            ->assertJsonPath('data.users.0.id', $member->id)
+            ->assertJsonPath('data.users.0.role', 'member');
+    }
+
+    public function test_admin_user_role_filter_rejects_unsupported_roles(): void
+    {
+        Sanctum::actingAs(User::factory()->admin()->create());
+
+        $this->getJson('/api/admin/users?role=owner')
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('role');
+    }
+
     public function test_admin_can_view_a_user_without_exposing_sensitive_attributes(): void
     {
         $admin = User::factory()->admin()->create();

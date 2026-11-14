@@ -7,26 +7,37 @@ use App\Models\Tag;
 use App\Models\Task;
 use App\Models\User;
 use Illuminate\Database\Seeder;
+use LogicException;
 
 class TaskManagementSeeder extends Seeder
 {
+    private const DEMO_PASSWORD = 'Taskflow-Local-2026!';
+
     public function run(): void
     {
-        $admin = User::query()->firstOrCreate(
-            ['email' => 'admin@example.test'],
-            User::factory()->admin()->make([
+        if (! app()->environment('local', 'testing')) {
+            throw new LogicException('Task management demo data can only be seeded in local or testing environments.');
+        }
+
+        $admin = User::query()->updateOrCreate(
+            ['email' => 'admin@example.com'],
+            [
                 'name' => 'Task Admin',
-                'email' => 'admin@example.test',
-                'role' => UserRole::Admin->value,
-            ])->getAttributes(),
+                'password' => self::DEMO_PASSWORD,
+                'role' => UserRole::Admin,
+            ],
         );
 
         $members = collect([
-            ['name' => 'Task Member One', 'email' => 'member.one@example.test'],
+            ['name' => 'Task Member', 'email' => 'member@example.com'],
             ['name' => 'Task Member Two', 'email' => 'member.two@example.test'],
-        ])->map(fn (array $attributes): User => User::query()->firstOrCreate(
+        ])->map(fn (array $attributes): User => User::query()->updateOrCreate(
             ['email' => $attributes['email']],
-            User::factory()->make($attributes)->getAttributes(),
+            [
+                ...$attributes,
+                'password' => self::DEMO_PASSWORD,
+                'role' => UserRole::Member,
+            ],
         ));
 
         $tags = collect(['planning', 'urgent', 'documentation'])
