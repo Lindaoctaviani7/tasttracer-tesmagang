@@ -35,7 +35,7 @@ class TaskPolicyTest extends TestCase
         $this->assertFalse($otherMember->can('view', $task));
     }
 
-    public function test_only_admins_creators_and_assignees_can_update_and_delete_a_task(): void
+    public function test_only_admins_and_creators_can_update_or_delete_a_task(): void
     {
         $admin = User::factory()->admin()->create();
         $creator = User::factory()->create();
@@ -47,14 +47,24 @@ class TaskPolicyTest extends TestCase
         foreach (['update', 'delete'] as $ability) {
             $this->assertTrue($admin->can($ability, $task));
             $this->assertTrue($creator->can($ability, $task));
-            $this->assertTrue($assignee->can($ability, $task));
+            $this->assertFalse($assignee->can($ability, $task));
             $this->assertFalse($otherMember->can($ability, $task));
         }
+
+        $this->assertTrue($admin->can('updateStatus', [$task, false]));
+        $this->assertTrue($creator->can('updateStatus', [$task, false]));
+        $this->assertTrue($assignee->can('updateStatus', [$task, true]));
+        $this->assertFalse($assignee->can('updateStatus', [$task, false]));
+        $this->assertFalse($otherMember->can('updateStatus', [$task, true]));
 
         $this->assertTrue($admin->can('manageAssignees', $task));
         $this->assertFalse($creator->can('manageAssignees', $task));
         $this->assertFalse($assignee->can('manageAssignees', $task));
         $this->assertFalse($otherMember->can('manageAssignees', $task));
+        $this->assertTrue($admin->can('manageTags', $task));
+        $this->assertTrue($creator->can('manageTags', $task));
+        $this->assertFalse($assignee->can('manageTags', $task));
+        $this->assertFalse($otherMember->can('manageTags', $task));
     }
 
     public function test_authenticated_roles_can_create_tasks(): void

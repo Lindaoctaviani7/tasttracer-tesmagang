@@ -287,7 +287,7 @@ describe('task dashboard', () => {
         return authenticatedUserResponse(config)
       }
 
-      if (config.url?.endsWith('/tasks/21') && config.method === 'patch') {
+      if (config.url?.endsWith('/tasks/21/status') && config.method === 'patch') {
         updatedTaskId = 21
         updatedRequestBody = JSON.parse(String(config.data)) as Record<string, unknown>
         tasks[0] = { ...tasks[0], is_completed: updatedRequestBody.is_completed as boolean }
@@ -324,14 +324,23 @@ describe('task dashboard', () => {
     const userActions = userEvent.setup()
     const summary = await screen.findByRole('region', { name: 'Ringkasan tugas' })
 
-    expect(within(summary).getByText('Total tugas').closest('article')?.textContent).toContain('2')
-    expect(within(summary).getByText('Sedang berjalan').closest('article')?.textContent).toContain('2')
-    expect(within(summary).getByText('Selesai').closest('article')?.textContent).toContain('0')
+    await waitFor(() => {
+      expect(within(summary).getByText('Total tugas').closest('article')?.textContent).toContain('2')
+      expect(within(summary).getByText('Sedang berjalan').closest('article')?.textContent).toContain('2')
+      expect(within(summary).getByText('Selesai').closest('article')?.textContent).toContain('0')
+    })
 
-    await userActions.click((await screen.findAllByRole('button', { name: 'Tandai Review sprint plan selesai' }))[0])
+    await userActions.click((await screen.findAllByRole('button', {
+      name: 'Ubah status tugas Review sprint plan, saat ini Berjalan',
+    }))[0])
+    await userActions.click(screen.getByRole('menuitemradio', { name: 'Selesai' }))
 
-    expect(await screen.findAllByRole('button', { name: 'Tandai Review sprint plan belum selesai' })).toHaveLength(2)
-    expect(screen.getAllByRole('button', { name: 'Tandai Keep other task pending selesai' })).toHaveLength(2)
+    expect(await screen.findAllByRole('button', {
+      name: 'Ubah status tugas Review sprint plan, saat ini Selesai',
+    })).toHaveLength(2)
+    expect(screen.getAllByRole('button', {
+      name: 'Ubah status tugas Keep other task pending, saat ini Berjalan',
+    })).toHaveLength(2)
     await waitFor(() => {
       expect(within(summary).getByText('Sedang berjalan').closest('article')?.textContent).toContain('1')
       expect(within(summary).getByText('Selesai').closest('article')?.textContent).toContain('1')
@@ -340,6 +349,57 @@ describe('task dashboard', () => {
     expect(updatedTaskId).toBe(21)
     expect(updatedRequestBody).toEqual({ is_completed: true })
     expect(tasks[1].is_completed).toBe(false)
+  })
+
+  it('lets an assignee complete an admin task but not edit or reopen it', async () => {
+    let assignedTask: Task = {
+      ...sampleTask,
+      created_by: 2,
+      creator: { id: 2, name: 'Admin User' },
+      assignees: [{ id: currentUser.id, name: currentUser.name }],
+    }
+    const adapter: AxiosAdapter = async (config) => {
+      if (config.url?.endsWith('/user')) {
+        return authenticatedUserResponse(config)
+      }
+
+      if (config.url?.endsWith('/tasks/21/status') && config.method === 'patch') {
+        const requestBody = JSON.parse(String(config.data)) as { is_completed: boolean }
+        assignedTask = { ...assignedTask, is_completed: requestBody.is_completed }
+
+        return taskResponse(config, assignedTask)
+      }
+
+      if (config.url?.endsWith('/tasks/21')) {
+        return taskResponse(config, assignedTask)
+      }
+
+      if (config.url?.endsWith('/tasks')) {
+        return taskListResponse(config, [assignedTask])
+      }
+
+      return response(config, { message: 'OK', data: {} })
+    }
+    apiClient.defaults.adapter = adapter
+    setup()
+    const userActions = userEvent.setup()
+
+    expect(await screen.findAllByRole('link', { name: 'Review sprint plan' })).toHaveLength(2)
+    expect(screen.queryAllByRole('link', { name: 'Edit Review sprint plan' })).toHaveLength(0)
+    await userActions.click((await screen.findAllByRole('button', {
+      name: 'Ubah status tugas Review sprint plan, saat ini Berjalan',
+    }))[0])
+
+    expect(screen.getAllByRole('menuitemradio').map((option) => option.textContent)).toEqual(['Selesai'])
+    await userActions.click(screen.getByRole('menuitemradio', { name: 'Selesai' }))
+
+    expect(await screen.findAllByRole('button', {
+      name: 'Ubah status tugas Review sprint plan, saat ini Selesai',
+    })).toHaveLength(2)
+    expect(assignedTask.is_completed).toBe(true)
+    expect((await screen.findAllByRole('button', {
+      name: 'Ubah status tugas Review sprint plan, saat ini Selesai',
+    }))[0].hasAttribute('disabled')).toBe(true)
   })
 
   it('updates task details and removes a tag from an existing task', async () => {
@@ -359,7 +419,7 @@ describe('task dashboard', () => {
       }
 
       if (config.url?.endsWith('/tasks/21') && config.method === 'put') {
-        const requestBody = JSON.parse(String(config.data)) as Pick<Task, 'title' | 'description' | 'is_completed'>
+        const requestBody = JSON.parse(String(config.data)) as Pick<Task, 'title' | 'description'>
         updatedTask = { ...updatedTask, ...requestBody }
 
         return taskResponse(config, updatedTask)
@@ -447,40 +507,27 @@ describe('task dashboard', () => {
     expect(await screen.findByText('Anda tidak memiliki izin untuk melakukan tindakan ini.')).toBeTruthy()
   })
 
-  it('loads task details and updates its status through the task API', async () => {
-    let updatedTask = sampleTask
+  it('loads task details without a separate status control', async () => {
     const adapter: AxiosAdapter = async (config) => {
       if (config.url?.endsWith('/user')) {
         return authenticatedUserResponse(config)
       }
 
-      if (config.url?.endsWith('/tasks/21') && config.method === 'patch') {
-        const requestBody = JSON.parse(String(config.data)) as { is_completed: boolean }
-        updatedTask = { ...updatedTask, is_completed: requestBody.is_completed }
-
-        return taskResponse(config, updatedTask)
-      }
-
       if (config.url?.endsWith('/tasks/21')) {
-        return taskResponse(config, updatedTask)
+        return taskResponse(config, sampleTask)
       }
 
       return response(config, { message: 'OK', data: {} })
     }
     apiClient.defaults.adapter = adapter
     setup('/tasks/21')
-    const userActions = userEvent.setup()
 
     expect(await screen.findByRole('heading', { name: 'Review sprint plan' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Tandai (selesai|berjalan)/i })).toBeNull()
     const assigneeSection = screen.getByRole('heading', { name: 'Assignee' }).closest('section')
     expect(assigneeSection).not.toBeNull()
     if (assigneeSection) {
       expect(within(assigneeSection).queryByRole('link', { name: 'Kelola' })).toBeNull()
     }
-
-    await userActions.click(screen.getByRole('button', { name: 'Tandai selesai' }))
-
-    expect((await screen.findByRole('status')).textContent).toContain('Tugas berhasil ditandai selesai.')
-    expect(updatedTask.is_completed).toBe(true)
   })
 })

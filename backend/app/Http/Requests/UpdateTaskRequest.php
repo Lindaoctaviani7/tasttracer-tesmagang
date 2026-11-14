@@ -16,7 +16,7 @@ class UpdateTaskRequest extends FormRequest
         return [
             'title' => [$this->isMethod('PUT') ? 'required' : 'sometimes', 'string', 'max:100'],
             'description' => ['sometimes', 'nullable', 'string'],
-            'is_completed' => ['sometimes', 'boolean'],
+            'is_completed' => ['prohibited'],
             'created_by' => ['prohibited'],
         ];
     }

@@ -151,18 +151,18 @@ class TagManagementTest extends TestCase
         ]);
     }
 
-    public function test_member_can_manage_tags_on_a_task_assigned_to_them(): void
+    public function test_member_cannot_manage_tags_on_a_task_assigned_by_an_admin(): void
     {
         $member = User::factory()->create();
-        $task = Task::factory()->create();
+        $task = Task::factory()->for(User::factory()->admin()->create(), 'creator')->create();
         $task->assignees()->attach($member);
         $tag = Tag::factory()->create();
 
         $this->authenticateAs($member)->postJson("/api/tasks/{$task->id}/tags", [
             'tag_ids' => [$tag->id],
-        ])->assertOk();
+        ])->assertForbidden();
 
-        $this->assertDatabaseHas('task_tag', [
+        $this->assertDatabaseMissing('task_tag', [
             'task_id' => $task->id,
             'tag_id' => $tag->id,
         ]);

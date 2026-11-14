@@ -19,6 +19,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/user', [AuthController::class, 'user']);
     Route::get('/users/assignee-options', AssigneeOptionsController::class);
 
+    Route::patch('/tasks/{task}/status', [TaskController::class, 'updateStatus']);
     Route::apiResource('tasks', TaskController::class);
     Route::get('/tasks/{task}/assignees', [TaskController::class, 'indexAssignees']);
     Route::post('/tasks/{task}/assignees', [TaskController::class, 'storeAssignees']);

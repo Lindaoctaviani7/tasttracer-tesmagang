@@ -164,7 +164,12 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
       void taskService.show(editTaskId)
         .then((task) => {
           if (active) {
-            setEditingTask(task)
+            if (user?.role !== 'admin' && task.created_by !== user?.id) {
+              setError('Tugas dari admin hanya dapat ditandai selesai, bukan diedit.')
+              navigate('/tasks', { replace: true })
+            } else {
+              setEditingTask(task)
+            }
           }
         })
         .catch((requestError: unknown) => {
@@ -184,7 +189,7 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
       active = false
       window.clearTimeout(timer)
     }
-  }, [editTaskId, navigate])
+  }, [editTaskId, navigate, user?.id, user?.role])
 
   useEffect(() => {
     if (!success) {
@@ -207,7 +212,6 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
         await taskService.update(editingTask.id, {
           title: values.title,
           description: values.description || null,
-          is_completed: values.is_completed,
         })
 
         const relationOperations: Promise<unknown>[] = [
@@ -230,7 +234,6 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
         const createdTask = await taskService.create({
           title: values.title,
           description: values.description || null,
-          is_completed: values.is_completed,
         })
         const relationOperations: Promise<unknown>[] = []
 
@@ -261,13 +264,17 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
     }
   }
 
-  async function handleToggleStatus(task: Task) {
+  async function handleUpdateStatus(task: Task, isCompleted: boolean) {
+    if (task.is_completed === isCompleted) {
+      return
+    }
+
     setIsUpdatingTaskId(task.id)
     setError(null)
     setSuccess(null)
 
     try {
-      const updatedTask = await taskService.updateStatus(task.id, !task.is_completed)
+      const updatedTask = await taskService.updateStatus(task.id, isCompleted)
       setSuccess(updatedTask.is_completed ? 'Tugas ditandai selesai.' : 'Tugas ditandai belum selesai.')
       await loadTasks()
 
@@ -411,9 +418,11 @@ export function TaskManagementPage({ page, admin = false }: TaskManagementPagePr
           ) : (
             <>
               <TaskList
+                currentUserId={user?.id ?? 0}
+                isAdmin={user?.role === 'admin'}
                 isUpdatingTaskId={isUpdatingTaskId}
                 onDelete={setDeletingTask}
-                onToggleStatus={(task) => void handleToggleStatus(task)}
+                onUpdateStatus={(task, isCompleted) => void handleUpdateStatus(task, isCompleted)}
                 tasks={tasks}
               />
               <TaskPagination

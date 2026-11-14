@@ -12,7 +12,6 @@ import { Modal } from './Modal'
 export interface TaskFormValues {
   title: string
   description: string
-  is_completed: boolean
   assigneeIds: number[]
   tagIds: number[]
 }
@@ -61,7 +60,6 @@ export function TaskFormModal({
 }: TaskFormModalProps) {
   const [title, setTitle] = useState(task?.title ?? '')
   const [description, setDescription] = useState(task?.description ?? '')
-  const [isCompleted, setIsCompleted] = useState(task?.is_completed ?? false)
   const [assigneeIds, setAssigneeIds] = useState<number[]>(
     task?.assignees.map((assignee) => assignee.id) ?? [],
   )
@@ -157,7 +155,6 @@ export function TaskFormModal({
       await onSubmit({
         title: title.trim(),
         description: description.trim(),
-        is_completed: isCompleted,
         assigneeIds,
         tagIds,
       })
@@ -199,21 +196,6 @@ export function TaskFormModal({
             value={description}
           />
         </div>
-
-        {task && (
-          <label className="flex cursor-pointer items-center justify-between rounded-xl border border-slate-200 px-4 py-3">
-            <span>
-              <span className="block text-sm font-medium text-slate-800">Status tugas</span>
-              <span className="mt-0.5 block text-xs text-slate-500">Tandai tugas selesai atau masih berjalan.</span>
-            </span>
-            <input
-              checked={isCompleted}
-              className="size-5 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
-              onChange={(event) => setIsCompleted(event.target.checked)}
-              type="checkbox"
-            />
-          </label>
-        )}
 
         {canManageAssignees && (
           <section>

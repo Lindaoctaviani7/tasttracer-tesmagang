@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { getErrorMessage } from '../api/errors'
-import { AuthNotice } from '../components/auth/AuthNotice'
 import { ConfirmDialog } from '../components/dashboard/ConfirmDialog'
 import { DashboardShell } from '../components/dashboard/DashboardShell'
 import { TaskStatusBadge } from '../components/dashboard/TaskStatusBadge'
@@ -36,11 +35,10 @@ export function TaskDetailPage() {
   const canManageAssignees = user?.role === 'admin'
   const [task, setTask] = useState<Task | null>(null)
   const [isLoading, setIsLoading] = useState(true)
-  const [isUpdating, setIsUpdating] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+  const canEditTask = user?.role === 'admin' || task?.created_by === user?.id
 
   const loadTask = useCallback(async () => {
     if (!taskId || !/^\d+$/.test(taskId)) {
@@ -69,28 +67,6 @@ export function TaskDetailPage() {
 
     return () => window.clearTimeout(timer)
   }, [loadTask])
-
-  async function handleToggleStatus() {
-    if (!task) {
-      return
-    }
-
-    setIsUpdating(true)
-    setError(null)
-    setSuccess(null)
-
-    try {
-      const updatedTask = await taskService.updateStatus(task.id, !task.is_completed)
-      setTask(updatedTask)
-      setSuccess(updatedTask.is_completed
-        ? 'Tugas berhasil ditandai selesai.'
-        : 'Tugas berhasil ditandai belum selesai.')
-    } catch (requestError: unknown) {
-      setError(getErrorMessage(requestError))
-    } finally {
-      setIsUpdating(false)
-    }
-  }
 
   async function handleDelete() {
     if (!task) {
@@ -122,7 +98,6 @@ export function TaskDetailPage() {
         </Link>
 
         {error && <ErrorState message={error} onRetry={() => void loadTask()} />}
-        {success && <AuthNotice message={success} tone="success" />}
 
         {isLoading ? (
           <LoadingState message="Memuat detail tugas..." />
@@ -143,27 +118,23 @@ export function TaskDetailPage() {
                   </p>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
-                  <button
-                    className="min-h-10 rounded-xl border border-slate-200 px-3.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
-                    disabled={isUpdating}
-                    onClick={() => void handleToggleStatus()}
-                    type="button"
-                  >
-                    {isUpdating ? 'Memperbarui...' : task.is_completed ? 'Tandai berjalan' : 'Tandai selesai'}
-                  </button>
-                  <Link
-                    className="inline-flex min-h-10 items-center justify-center rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700"
-                    to={`/tasks/${task.id}/edit`}
-                  >
-                    Edit tugas
-                  </Link>
-                  <button
-                    className="min-h-10 rounded-xl border border-rose-200 px-3.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
-                    onClick={() => setIsDeleteDialogOpen(true)}
-                    type="button"
-                  >
-                    Hapus
-                  </button>
+                  {canEditTask && (
+                    <Link
+                      className="inline-flex min-h-10 items-center justify-center rounded-xl bg-indigo-600 px-4 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                      to={`/tasks/${task.id}/edit`}
+                    >
+                      Edit tugas
+                    </Link>
+                  )}
+                  {canEditTask && (
+                    <button
+                      className="min-h-10 rounded-xl border border-rose-200 px-3.5 text-sm font-semibold text-rose-700 transition hover:bg-rose-50"
+                      onClick={() => setIsDeleteDialogOpen(true)}
+                      type="button"
+                    >
+                      Hapus
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -228,12 +199,12 @@ export function TaskDetailPage() {
                     <h2 className="font-semibold text-slate-900">Tag</h2>
                     <p className="mt-1 text-sm text-slate-500">Label untuk membantu mengelompokkan tugas.</p>
                   </div>
-                  <Link
+                  {canEditTask && <Link
                     className="shrink-0 rounded-lg px-3 py-2 text-xs font-semibold text-indigo-700 transition hover:bg-indigo-50"
                     to={`/tasks/${task.id}/edit`}
                   >
                     Kelola
-                  </Link>
+                  </Link>}
                 </div>
                 {task.tags.length === 0 ? (
                   <p className="mt-5 rounded-xl bg-slate-50 px-4 py-5 text-center text-sm text-slate-500">

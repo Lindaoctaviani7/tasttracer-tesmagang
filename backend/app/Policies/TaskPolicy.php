@@ -25,12 +25,25 @@ class TaskPolicy
 
     public function update(User $user, Task $task): bool
     {
-        return $this->canAccess($user, $task);
+        return $user->role === UserRole::Admin
+            || $task->created_by === $user->id;
+    }
+
+    public function updateStatus(User $user, Task $task, bool $isCompleted): bool
+    {
+        if ($user->role === UserRole::Admin || $task->created_by === $user->id) {
+            return true;
+        }
+
+        return $isCompleted
+            && ! $task->is_completed
+            && $task->assignees()->whereKey($user->id)->exists();
     }
 
     public function delete(User $user, Task $task): bool
     {
-        return $this->canAccess($user, $task);
+        return $user->role === UserRole::Admin
+            || $task->created_by === $user->id;
     }
 
     public function manageAssignees(User $user, Task $task): bool
@@ -40,7 +53,8 @@ class TaskPolicy
 
     public function manageTags(User $user, Task $task): bool
     {
-        return $this->canAccess($user, $task);
+        return $user->role === UserRole::Admin
+            || $task->created_by === $user->id;
     }
 
     private function canAccess(User $user, Task $task): bool

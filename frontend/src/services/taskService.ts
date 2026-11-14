@@ -23,7 +23,6 @@ export interface CreateTaskData {
 export interface UpdateTaskData {
   title?: string
   description?: string | null
-  is_completed?: boolean
 }
 
 interface TaskCollection extends PaginatedCollection {
@@ -58,7 +57,7 @@ export const taskService = {
   },
 
   async updateStatus(taskId: number, isCompleted: boolean): Promise<Task> {
-    const response = await apiClient.patch<ApiResponse<{ task: Task }>>(`/tasks/${taskId}`, {
+    const response = await apiClient.patch<ApiResponse<{ task: Task }>>(`/tasks/${taskId}/status`, {
       is_completed: isCompleted,
     })
 

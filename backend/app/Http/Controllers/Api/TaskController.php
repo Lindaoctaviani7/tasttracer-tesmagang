@@ -10,6 +10,7 @@ use App\Http\Requests\ManageTaskAssigneesRequest;
 use App\Http\Requests\ManageTaskTagsRequest;
 use App\Http\Requests\StoreTaskRequest;
 use App\Http\Requests\UpdateTaskRequest;
+use App\Http\Requests\UpdateTaskStatusRequest;
 use App\Http\Resources\TagResource;
 use App\Http\Resources\TaskResource;
 use App\Http\Resources\UserResource;
@@ -101,6 +102,18 @@ class TaskController extends Controller
 
         return response()->json([
             'message' => 'Task updated successfully.',
+            'data' => ['task' => (new TaskResource($task))->resolve()],
+        ]);
+    }
+
+    public function updateStatus(UpdateTaskStatusRequest $request, Task $task): JsonResponse
+    {
+        Gate::authorize('updateStatus', [$task, $request->boolean('is_completed')]);
+        $task->update($request->validated());
+        $task->load(['creator:id,name', 'assignees:id,name', 'tags']);
+
+        return response()->json([
+            'message' => 'Task status updated successfully.',
             'data' => ['task' => (new TaskResource($task))->resolve()],
         ]);
     }

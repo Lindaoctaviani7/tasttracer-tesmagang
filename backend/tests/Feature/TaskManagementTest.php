@@ -16,6 +16,7 @@ class TaskManagementTest extends TestCase
     {
         $this->getJson('/api/tasks')->assertUnauthorized();
         $this->withToken('invalid-token')->getJson('/api/tasks')->assertUnauthorized();
+        $this->patchJson('/api/tasks/1/status', ['is_completed' => true])->assertUnauthorized();
     }
 
     public function test_member_sees_only_tasks_they_created_or_are_assigned_to(): void
@@ -172,7 +173,7 @@ class TaskManagementTest extends TestCase
         $this->assertDatabaseMissing('tasks', ['title' => 'Valid title']);
     }
 
-    public function test_member_can_update_a_task_they_created_or_are_assigned_to(): void
+    public function test_member_can_update_own_task_details_and_complete_an_assigned_task(): void
     {
         $member = User::factory()->create();
         $createdTask = Task::factory()->for($member, 'creator')->create();
@@ -184,10 +185,19 @@ class TaskManagementTest extends TestCase
         ])->assertOk()
             ->assertJsonPath('data.task.title', 'Updated created task');
 
-        $this->authenticateAs($member)->patchJson("/api/tasks/{$assignedTask->id}", [
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$assignedTask->id}/status", [
             'is_completed' => true,
         ])->assertOk()
             ->assertJsonPath('data.task.is_completed', true);
+
+        $admin = User::factory()->admin()->create();
+        $this->authenticateAs($admin)->getJson("/api/tasks/{$assignedTask->id}")
+            ->assertOk()
+            ->assertJsonPath('data.task.is_completed', true);
+
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$assignedTask->id}/status", [
+            'is_completed' => false,
+        ])->assertForbidden();
 
         $this->assertDatabaseHas('tasks', [
             'id' => $createdTask->id,
@@ -196,6 +206,15 @@ class TaskManagementTest extends TestCase
         $this->assertDatabaseHas('tasks', [
             'id' => $assignedTask->id,
             'is_completed' => true,
+        ]);
+
+        $this->authenticateAs($member)->putJson("/api/tasks/{$assignedTask->id}", [
+            'title' => 'Attempted assigned task edit',
+        ])->assertForbidden();
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $assignedTask->id,
+            'title' => $assignedTask->title,
         ]);
     }
 
@@ -211,18 +230,17 @@ class TaskManagementTest extends TestCase
         $this->authenticateAs($member)->putJson("/api/tasks/{$task->id}", [
             'title' => 'Replacement title',
             'description' => 'Replacement description',
-            'is_completed' => true,
         ])
             ->assertOk()
             ->assertJsonPath('data.task.title', 'Replacement title')
             ->assertJsonPath('data.task.description', 'Replacement description')
-            ->assertJsonPath('data.task.is_completed', true);
+            ->assertJsonPath('data.task.is_completed', false);
 
         $this->assertDatabaseHas('tasks', [
             'id' => $task->id,
             'title' => 'Replacement title',
             'description' => 'Replacement description',
-            'is_completed' => true,
+            'is_completed' => false,
             'created_by' => $member->id,
         ]);
     }
@@ -239,7 +257,7 @@ class TaskManagementTest extends TestCase
             'is_completed' => false,
         ]);
 
-        $this->authenticateAs($member)->patchJson("/api/tasks/{$taskToComplete->id}", [
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$taskToComplete->id}/status", [
             'is_completed' => true,
         ])
             ->assertOk()
@@ -266,7 +284,6 @@ class TaskManagementTest extends TestCase
         $this->authenticateAs($member)->putJson("/api/tasks/{$task->id}", [
             'title' => '',
             'description' => null,
-            'is_completed' => false,
         ])
             ->assertUnprocessable()
             ->assertJsonValidationErrors('title')
@@ -305,6 +322,10 @@ class TaskManagementTest extends TestCase
             'title' => 'Unauthorized update',
         ])->assertForbidden();
 
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$task->id}/status", [
+            'is_completed' => true,
+        ])->assertForbidden();
+
         $this->authenticateAs($member)->deleteJson("/api/tasks/{$task->id}")
             ->assertForbidden();
 
@@ -314,7 +335,7 @@ class TaskManagementTest extends TestCase
         ]);
     }
 
-    public function test_member_can_delete_a_task_they_created_or_are_assigned_to(): void
+    public function test_member_can_delete_a_task_they_created_but_not_one_they_are_assigned_to(): void
     {
         $member = User::factory()->create();
         $createdTask = Task::factory()->for($member, 'creator')->create();
@@ -324,10 +345,50 @@ class TaskManagementTest extends TestCase
         $this->authenticateAs($member)->deleteJson("/api/tasks/{$createdTask->id}")
             ->assertOk();
         $this->authenticateAs($member)->deleteJson("/api/tasks/{$assignedTask->id}")
-            ->assertOk();
+            ->assertForbidden();
 
         $this->assertDatabaseMissing('tasks', ['id' => $createdTask->id]);
-        $this->assertDatabaseMissing('tasks', ['id' => $assignedTask->id]);
+        $this->assertDatabaseHas('tasks', ['id' => $assignedTask->id]);
+    }
+
+    public function test_task_details_cannot_be_updated_with_a_status_field(): void
+    {
+        $member = User::factory()->create();
+        $task = Task::factory()->for($member, 'creator')->create([
+            'is_completed' => false,
+        ]);
+
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$task->id}", [
+            'is_completed' => true,
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('is_completed')
+            ->assertJsonPath('errors.is_completed.0', 'The is completed field is prohibited.');
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $task->id,
+            'is_completed' => false,
+        ]);
+    }
+
+    public function test_task_status_rejects_values_that_are_not_boolean(): void
+    {
+        $member = User::factory()->create();
+        $task = Task::factory()->for($member, 'creator')->create([
+            'is_completed' => false,
+        ]);
+
+        $this->authenticateAs($member)->patchJson("/api/tasks/{$task->id}/status", [
+            'is_completed' => 'finished',
+        ])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('is_completed')
+            ->assertJsonPath('errors.is_completed.0', 'The is completed field must be true or false.');
+
+        $this->assertDatabaseHas('tasks', [
+            'id' => $task->id,
+            'is_completed' => false,
+        ]);
     }
 
     public function test_admin_can_update_and_delete_any_task(): void
