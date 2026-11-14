@@ -9,6 +9,7 @@ import type {
 
 export interface UserFilters {
   search?: string
+  role?: UserRole
   page?: number
   per_page?: number
 }
@@ -28,6 +29,17 @@ interface AssigneeOptionCollection extends PaginatedCollection {
 }
 
 export const userService = {
+  async getAdminDashboardStats() {
+    const response = await apiClient.get<ApiResponse<{
+      total_users: number
+      total_tasks: number
+      completed_tasks: number
+      pending_tasks: number
+    }>>('/admin/dashboard/stats')
+
+    return response.data.data
+  },
+
   async listAssigneeOptions(filters: AssigneeOptionFilters = {}): Promise<AssigneeOptionCollection> {
     const response = await apiClient.get<ApiResponse<AssigneeOptionCollection>>(
       '/users/assignee-options',

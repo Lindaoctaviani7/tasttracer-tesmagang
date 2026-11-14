@@ -3,9 +3,16 @@ import type { Pagination } from '../../types/api'
 interface TaskPaginationProps {
   pagination: Pagination
   onPageChange: (page: number) => void
+  itemLabel?: string
+  ariaLabel?: string
 }
 
-export function TaskPagination({ pagination, onPageChange }: TaskPaginationProps) {
+export function TaskPagination({
+  pagination,
+  onPageChange,
+  itemLabel = 'tugas',
+  ariaLabel = 'Pagination tugas',
+}: TaskPaginationProps) {
   if (pagination.last_page <= 1) {
     return null
   }
@@ -17,9 +24,9 @@ export function TaskPagination({ pagination, onPageChange }: TaskPaginationProps
     <div className="flex flex-col gap-3 border-t border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5">
       <p className="text-xs text-slate-500 sm:text-sm">
         Menampilkan <span className="font-medium text-slate-700">{firstItem}–{lastItem}</span> dari{' '}
-        <span className="font-medium text-slate-700">{pagination.total}</span> tugas
+        <span className="font-medium text-slate-700">{pagination.total}</span> {itemLabel}
       </p>
-      <div aria-label="Pagination tugas" className="flex items-center gap-2">
+      <div aria-label={ariaLabel} className="flex items-center gap-2">
         <button
           aria-label="Halaman sebelumnya"
           className="flex size-9 items-center justify-center rounded-lg border border-slate-200 text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"

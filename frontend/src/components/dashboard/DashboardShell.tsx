@@ -5,7 +5,7 @@ import { AuthNotice } from '../auth/AuthNotice'
 import { useAuth } from '../../hooks/useAuth'
 
 interface DashboardShellProps {
-  active: 'dashboard' | 'tasks'
+  active: 'dashboard' | 'tasks' | 'admin' | 'adminTasks' | 'adminUsers'
   children: ReactNode
 }
 
@@ -24,7 +24,13 @@ const navigation = [
   },
 ] as const
 
-function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
+function NavigationLinks({
+  isAdmin,
+  onNavigate,
+}: {
+  isAdmin: boolean
+  onNavigate?: () => void
+}) {
   return (
     <nav aria-label="Navigasi utama" className="flex flex-col gap-1">
       {navigation.map((item) => (
@@ -55,6 +61,35 @@ function NavigationLinks({ onNavigate }: { onNavigate?: () => void }) {
           {item.label}
         </NavLink>
       ))}
+      {isAdmin && (
+        <>
+          <p className="px-3 pb-1 pt-5 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-400">
+            Administrasi
+          </p>
+          {[
+            { label: 'Dashboard admin', to: '/admin', key: 'admin' },
+            { label: 'Semua tugas', to: '/admin/tasks', key: 'adminTasks' },
+            { label: 'Pengguna', to: '/admin/users', key: 'adminUsers' },
+          ].map((item) => (
+            <NavLink
+              className={({ isActive }) => `flex min-h-11 items-center gap-3 rounded-xl px-3 text-sm font-medium transition ${
+                isActive
+                  ? 'bg-indigo-50 text-indigo-700'
+                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-950'
+              }`}
+              end={item.key !== 'adminUsers'}
+              key={item.key}
+              onClick={onNavigate}
+              to={item.to}
+            >
+              <span aria-hidden="true" className="flex size-5 items-center justify-center text-base">
+                {item.key === 'adminUsers' ? '♙' : item.key === 'adminTasks' ? '✓' : '▦'}
+              </span>
+              {item.label}
+            </NavLink>
+          ))}
+        </>
+      )}
     </nav>
   )
 }
@@ -65,6 +100,7 @@ export function DashboardShell({ active, children }: DashboardShellProps) {
   const [isMobileNavigationOpen, setIsMobileNavigationOpen] = useState(false)
   const [logoutError, setLogoutError] = useState<string | null>(null)
   const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const isAdmin = user?.role === 'admin'
 
   async function handleLogout() {
     setLogoutError(null)
@@ -106,7 +142,7 @@ export function DashboardShell({ active, children }: DashboardShellProps) {
           <p className="px-3 text-[0.68rem] font-semibold uppercase tracking-[0.16em] text-slate-400">
             Workspace
           </p>
-          <NavigationLinks />
+          <NavigationLinks isAdmin={isAdmin} />
         </div>
 
         <div className="mt-auto rounded-2xl bg-slate-50 p-4">
@@ -143,7 +179,7 @@ export function DashboardShell({ active, children }: DashboardShellProps) {
               </button>
             </div>
             <div className="mt-9">
-              <NavigationLinks onNavigate={() => setIsMobileNavigationOpen(false)} />
+              <NavigationLinks isAdmin={isAdmin} onNavigate={() => setIsMobileNavigationOpen(false)} />
             </div>
           </aside>
         </div>
@@ -166,7 +202,13 @@ export function DashboardShell({ active, children }: DashboardShellProps) {
             <p className="hidden text-sm text-slate-500 sm:block">
               Workspace <span className="px-1 text-slate-300">/</span>
               <span className="font-medium text-slate-900">
-                {active === 'dashboard' ? 'Ringkasan' : 'Semua tugas'}
+                {{
+                  dashboard: 'Ringkasan',
+                  tasks: 'Semua tugas',
+                  admin: 'Dashboard admin',
+                  adminTasks: 'Manajemen tugas',
+                  adminUsers: 'Manajemen pengguna',
+                }[active]}
               </span>
             </p>
             <p className="text-sm font-semibold sm:hidden">Taskflow</p>

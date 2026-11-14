@@ -3,6 +3,9 @@ import { LoadingState } from '../components/feedback/LoadingState'
 import { useAuth } from '../hooks/useAuth'
 import { LoginPage } from '../pages/LoginPage'
 import { RegisterPage } from '../pages/RegisterPage'
+import { AdminDashboardPage } from '../pages/AdminDashboardPage'
+import { AdminUserDetailPage } from '../pages/AdminUserDetailPage'
+import { AdminUserManagementPage } from '../pages/AdminUserManagementPage'
 import { TaskDetailPage } from '../pages/TaskDetailPage'
 import { TaskManagementPage } from '../pages/TaskManagementPage'
 
@@ -14,6 +17,16 @@ function ProtectedRoute() {
   }
 
   return user ? <Outlet /> : <Navigate to="/login" replace />
+}
+
+function AdminRoute() {
+  const { isLoading, user } = useAuth()
+
+  if (isLoading) {
+    return <LoadingState message="Memeriksa akses admin..." />
+  }
+
+  return user?.role === 'admin' ? <Outlet /> : <Navigate to="/dashboard" replace />
 }
 
 function GuestRoute() {
@@ -52,6 +65,12 @@ export function AppRoutes() {
           <Route path="/tasks/:taskId/edit" element={<TaskManagementPage page="tasks" />} />
           <Route path="/tasks/:taskId" element={<TaskDetailPage />} />
           <Route path="/account" element={<Navigate to="/dashboard" replace />} />
+          <Route element={<AdminRoute />}>
+            <Route path="/admin" element={<AdminDashboardPage />} />
+            <Route path="/admin/tasks" element={<TaskManagementPage page="tasks" admin />} />
+            <Route path="/admin/users" element={<AdminUserManagementPage />} />
+            <Route path="/admin/users/:userId" element={<AdminUserDetailPage />} />
+          </Route>
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

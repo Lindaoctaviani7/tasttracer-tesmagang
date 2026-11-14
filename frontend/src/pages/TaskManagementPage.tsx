@@ -16,6 +16,7 @@ import type { Pagination, Task } from '../types/api'
 
 interface TaskManagementPageProps {
   page: 'dashboard' | 'tasks'
+  admin?: boolean
 }
 
 interface TaskSummary {
@@ -42,7 +43,7 @@ function relationFailureMessage(results: PromiseSettledResult<unknown>[]): strin
     .join(' ')
 }
 
-export function TaskManagementPage({ page }: TaskManagementPageProps) {
+export function TaskManagementPage({ page, admin = false }: TaskManagementPageProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const [tasks, setTasks] = useState<Task[]>([])
@@ -295,7 +296,7 @@ export function TaskManagementPage({ page }: TaskManagementPageProps) {
     : 'Cari, filter, dan kelola tugas yang dapat Anda akses.'
 
   return (
-    <DashboardShell active={page}>
+    <DashboardShell active={admin ? 'adminTasks' : page}>
       <div className="flex flex-col gap-6">
         <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
           <div>

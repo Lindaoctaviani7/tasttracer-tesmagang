@@ -24,6 +24,13 @@ export interface User {
   created_at: string | null
 }
 
+export interface AdminDashboardStats {
+  total_users: number
+  total_tasks: number
+  completed_tasks: number
+  pending_tasks: number
+}
+
 export interface AssigneeOption {
   id: number
   name: string
